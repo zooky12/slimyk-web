@@ -22,7 +22,7 @@
 "C:\Program Files\dotnet\packs\Microsoft.NETCore.App.Runtime.Mono.browser-wasm\9.0.10\runtimes\browser-wasm\native\libmono-component-debugger-stub-static.a"
 "C:\Program Files\dotnet\packs\Microsoft.NETCore.App.Runtime.Mono.browser-wasm\9.0.10\runtimes\browser-wasm\native\libmono-component-diagnostics_tracing-stub-static.a"
 "C:\Program Files\dotnet\packs\Microsoft.NETCore.App.Runtime.Mono.browser-wasm\9.0.10\runtimes\browser-wasm\native\libmono-component-hot_reload-stub-static.a"
-"C:\Program Files\dotnet\packs\Microsoft.NETCore.App.Runtime.Mono.browser-wasm\9.0.10\runtimes\browser-wasm\native\libmono-component-marshal-ilgen-stub-static.a"
+"C:\Program Files\dotnet\packs\Microsoft.NETCore.App.Runtime.Mono.browser-wasm\9.0.10\runtimes\browser-wasm\native\libmono-component-marshal-ilgen-static.a"
 "C:\Program Files\dotnet\packs\Microsoft.NETCore.App.Runtime.Mono.browser-wasm\9.0.10\runtimes\browser-wasm\native\libmono-ee-interp.a"
 "C:\Program Files\dotnet\packs\Microsoft.NETCore.App.Runtime.Mono.browser-wasm\9.0.10\runtimes\browser-wasm\native\libmono-icall-table.a"
 "C:\Program Files\dotnet\packs\Microsoft.NETCore.App.Runtime.Mono.browser-wasm\9.0.10\runtimes\browser-wasm\native\libmono-profiler-aot.a"

@@ -1,0 +1,21 @@
+{
+  "runtimeOptions": {
+    "tfm": "net8.0",
+    "includedFrameworks": [
+      {
+        "name": "Microsoft.NETCore.App",
+        "version": "8.0.21"
+      }
+    ],
+    "configProperties": {
+      "System.Globalization.Invariant": true,
+      "System.Globalization.PredefinedCulturesOnly": true,
+      "System.Runtime.Serialization.EnableUnsafeBinaryFormatterSerialization": false
+    },
+    "wasmHostProperties": {
+      "runtimeArgs": [],
+      "perHostConfig": [],
+      "mainAssembly": "EngineWasm.dll"
+    }
+  }
+}

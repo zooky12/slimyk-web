@@ -1,10 +1,9 @@
 {
   "version": 2,
-  "dgSpecHash": "IcCkMfRi6oU=",
+  "dgSpecHash": "WcOLR6isODUXTI7aF/mxN2VAq3BW4PLexKJ28j3FTQ7dWZbAecaBf83XROlciXKXsE/UgoGD3X/flWGwk9G3yQ==",
   "success": true,
   "projectFilePath": "C:\\Users\\zooky\\UnityProjects\\slimk-web\\slimyk-web\\wasm\\EngineWasm\\EngineWasm.csproj",
   "expectedPackageFiles": [
-    "C:\\Users\\zooky\\.nuget\\packages\\microsoft.net.illink.tasks\\9.0.10\\microsoft.net.illink.tasks.9.0.10.nupkg.sha512",
     "C:\\Users\\zooky\\.nuget\\packages\\newtonsoft.json\\13.0.3\\newtonsoft.json.13.0.3.nupkg.sha512"
   ],
   "logs": []

@@ -1,6 +1,20 @@
 // GENERATED FILE, DO NOT MODIFY");
 
 
+uint32_t CompressionNative_Crc32 (uint32_t, void *, int32_t);
+
+int32_t CompressionNative_Deflate (void *, int32_t);
+
+int32_t CompressionNative_DeflateEnd (void *);
+
+int32_t CompressionNative_DeflateInit2_ (void *, int32_t, int32_t, int32_t, int32_t, int32_t);
+
+int32_t CompressionNative_Inflate (void *, int32_t);
+
+int32_t CompressionNative_InflateEnd (void *);
+
+int32_t CompressionNative_InflateInit2_ (void *, int32_t);
+
 int32_t SystemNative_Close (void *);
 
 int32_t SystemNative_CloseDir (void *);
@@ -9,7 +23,11 @@ int32_t SystemNative_ConvertErrorPalToPlatform (int32_t);
 
 int32_t SystemNative_ConvertErrorPlatformToPal (int32_t);
 
+void * SystemNative_Dup (void *);
+
 int32_t SystemNative_FAllocate (void *, int64_t, int64_t);
+
+int32_t SystemNative_FcntlSetFD (void *, int32_t);
 
 int32_t SystemNative_FLock (void *, int32_t);
 
@@ -59,7 +77,15 @@ int64_t SystemNative_LSeek (void *, int64_t, int32_t);
 
 int32_t SystemNative_LStat (void *, void *);
 
+int32_t SystemNative_MAdvise (void *, uint64_t, int32_t);
+
 void * SystemNative_Malloc (void *);
+
+void * SystemNative_MMap (void *, uint64_t, int32_t, int32_t, void *, int64_t);
+
+int32_t SystemNative_MSync (void *, uint64_t, int32_t);
+
+int32_t SystemNative_MUnmap (void *, uint64_t);
 
 void * SystemNative_Open (void *, int32_t, int32_t);
 
@@ -85,9 +111,15 @@ int32_t SystemNative_SchedGetCpu ();
 
 void SystemNative_SetErrNo (int32_t);
 
+void * SystemNative_ShmOpen (void *, int32_t, int32_t);
+
+int32_t SystemNative_ShmUnlink (void *);
+
 int32_t SystemNative_Stat (void *, void *);
 
 void * SystemNative_StrErrorR (int32_t, void *, int32_t);
+
+int64_t SystemNative_SysConf (int32_t);
 
 uint32_t SystemNative_TryGetUInt32OSThreadId ();
 
@@ -97,14 +129,16 @@ int32_t SystemNative_Write (void *, void *, int32_t);
 static PinvokeImport libSystem_Native_imports [] = {
     {"SystemNative_Close", SystemNative_Close}, // System.Private.CoreLib
     {"SystemNative_CloseDir", SystemNative_CloseDir}, // System.Private.CoreLib
-    {"SystemNative_ConvertErrorPalToPlatform", SystemNative_ConvertErrorPalToPlatform}, // System.Private.CoreLib
-    {"SystemNative_ConvertErrorPlatformToPal", SystemNative_ConvertErrorPlatformToPal}, // System.Private.CoreLib
+    {"SystemNative_ConvertErrorPalToPlatform", SystemNative_ConvertErrorPalToPlatform}, // System.Console, System.IO.Compression.ZipFile, System.IO.MemoryMappedFiles, System.Private.CoreLib
+    {"SystemNative_ConvertErrorPlatformToPal", SystemNative_ConvertErrorPlatformToPal}, // System.Console, System.IO.Compression.ZipFile, System.IO.MemoryMappedFiles, System.Private.CoreLib
+    {"SystemNative_Dup", SystemNative_Dup}, // System.Console
     {"SystemNative_FAllocate", SystemNative_FAllocate}, // System.Private.CoreLib
+    {"SystemNative_FcntlSetFD", SystemNative_FcntlSetFD}, // System.IO.MemoryMappedFiles
     {"SystemNative_FLock", SystemNative_FLock}, // System.Private.CoreLib
     {"SystemNative_Free", SystemNative_Free}, // System.Private.CoreLib
-    {"SystemNative_FStat", SystemNative_FStat}, // System.Private.CoreLib
+    {"SystemNative_FStat", SystemNative_FStat}, // System.IO.Compression.ZipFile, System.IO.MemoryMappedFiles, System.Private.CoreLib
     {"SystemNative_FSync", SystemNative_FSync}, // System.Private.CoreLib
-    {"SystemNative_FTruncate", SystemNative_FTruncate}, // System.Private.CoreLib
+    {"SystemNative_FTruncate", SystemNative_FTruncate}, // System.IO.MemoryMappedFiles, System.Private.CoreLib
     {"SystemNative_GetCryptographicallySecureRandomBytes", SystemNative_GetCryptographicallySecureRandomBytes}, // System.Private.CoreLib
     {"SystemNative_GetCwd", SystemNative_GetCwd}, // System.Private.CoreLib
     {"SystemNative_GetEnv", SystemNative_GetEnv}, // System.Private.CoreLib
@@ -124,7 +158,11 @@ static PinvokeImport libSystem_Native_imports [] = {
     {"SystemNative_LowLevelMonitor_Wait", SystemNative_LowLevelMonitor_Wait}, // System.Private.CoreLib
     {"SystemNative_LSeek", SystemNative_LSeek}, // System.Private.CoreLib
     {"SystemNative_LStat", SystemNative_LStat}, // System.Private.CoreLib
+    {"SystemNative_MAdvise", SystemNative_MAdvise}, // System.IO.MemoryMappedFiles
     {"SystemNative_Malloc", SystemNative_Malloc}, // System.Private.CoreLib
+    {"SystemNative_MMap", SystemNative_MMap}, // System.IO.MemoryMappedFiles
+    {"SystemNative_MSync", SystemNative_MSync}, // System.IO.MemoryMappedFiles
+    {"SystemNative_MUnmap", SystemNative_MUnmap}, // System.IO.MemoryMappedFiles
     {"SystemNative_Open", SystemNative_Open}, // System.Private.CoreLib
     {"SystemNative_OpenDir", SystemNative_OpenDir}, // System.Private.CoreLib
     {"SystemNative_PosixFAdvise", SystemNative_PosixFAdvise}, // System.Private.CoreLib
@@ -137,14 +175,24 @@ static PinvokeImport libSystem_Native_imports [] = {
     {"SystemNative_ReadLink", SystemNative_ReadLink}, // System.Private.CoreLib
     {"SystemNative_SchedGetCpu", SystemNative_SchedGetCpu}, // System.Private.CoreLib
     {"SystemNative_SetErrNo", SystemNative_SetErrNo}, // System.Private.CoreLib
-    {"SystemNative_Stat", SystemNative_Stat}, // System.Private.CoreLib
-    {"SystemNative_StrErrorR", SystemNative_StrErrorR}, // System.Private.CoreLib
+    {"SystemNative_ShmOpen", SystemNative_ShmOpen}, // System.IO.MemoryMappedFiles
+    {"SystemNative_ShmUnlink", SystemNative_ShmUnlink}, // System.IO.MemoryMappedFiles
+    {"SystemNative_Stat", SystemNative_Stat}, // System.IO.Compression.ZipFile, System.Private.CoreLib
+    {"SystemNative_StrErrorR", SystemNative_StrErrorR}, // System.Console, System.IO.Compression.ZipFile, System.IO.MemoryMappedFiles, System.Private.CoreLib
+    {"SystemNative_SysConf", SystemNative_SysConf}, // System.IO.MemoryMappedFiles
     {"SystemNative_TryGetUInt32OSThreadId", SystemNative_TryGetUInt32OSThreadId}, // System.Private.CoreLib
-    {"SystemNative_Unlink", SystemNative_Unlink}, // System.Private.CoreLib
-    {"SystemNative_Write", SystemNative_Write}, // System.Private.CoreLib
+    {"SystemNative_Unlink", SystemNative_Unlink}, // System.IO.MemoryMappedFiles, System.Private.CoreLib
+    {"SystemNative_Write", SystemNative_Write}, // System.Console, System.Private.CoreLib
     {NULL, NULL}
 };
 static PinvokeImport libSystem_IO_Compression_Native_imports [] = {
+    {"CompressionNative_Crc32", CompressionNative_Crc32}, // System.IO.Compression
+    {"CompressionNative_Deflate", CompressionNative_Deflate}, // System.IO.Compression, System.Net.WebSockets
+    {"CompressionNative_DeflateEnd", CompressionNative_DeflateEnd}, // System.IO.Compression, System.Net.WebSockets
+    {"CompressionNative_DeflateInit2_", CompressionNative_DeflateInit2_}, // System.IO.Compression, System.Net.WebSockets
+    {"CompressionNative_Inflate", CompressionNative_Inflate}, // System.IO.Compression, System.Net.WebSockets
+    {"CompressionNative_InflateEnd", CompressionNative_InflateEnd}, // System.IO.Compression, System.Net.WebSockets
+    {"CompressionNative_InflateInit2_", CompressionNative_InflateInit2_}, // System.IO.Compression, System.Net.WebSockets
     {NULL, NULL}
 };
 static PinvokeImport libSystem_Globalization_Native_imports [] = {

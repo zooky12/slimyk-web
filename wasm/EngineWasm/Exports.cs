@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices.JavaScript;
 using System.Text.Json;
@@ -15,16 +16,14 @@ public partial class Exports
     public static string Engine_Init(string levelJson)
     {
         var start = Loader.FromJson(levelJson);
-        var id = System.Guid.NewGuid().ToString("N");
+        var id = Guid.NewGuid().ToString("N");
         Sessions[id] = new Session(start);
         return id;
     }
 
     [JSExport]
     public static string Engine_GetState(string sid)
-    {
-        return JsonSerializer.Serialize(Sessions[sid].ToDto());
-    }
+        => JsonSerializer.Serialize(Sessions[sid].ToDto());
 
     // dir: 0=N, 1=E, 2=S, 3=W
     [JSExport]
@@ -38,19 +37,39 @@ public partial class Exports
     [JSExport] public static bool Engine_Undo(string sid) => Sessions[sid].Undo();
     [JSExport] public static void Engine_Reset(string sid) => Sessions[sid].Reset();
 
-    // ---------- DTOs ----------
+    // ---------- DTOs (properties so System.Text.Json serializes them) ----------
 
-    private sealed class StepDto { public bool moved; public bool win; public bool lose; }
+    private sealed class StepDto
+    {
+        public bool moved { get; set; }
+        public bool win { get; set; }
+        public bool lose { get; set; }
+    }
 
     private sealed class DrawDto
     {
-        public int w, h;
-        public int[] tiles = default!;          // 0=floor,1=wall,2=hole,3=exit (add more if you like)
-        public PlayerDto player = default!;
-        public List<EntityDto> entities = default!;
+        public int w { get; set; }
+        public int h { get; set; }
+        public int[] tiles { get; set; } = Array.Empty<int>();
+        public PlayerDto player { get; set; } = new();
+        public List<EntityDto> entities { get; set; } = new();
     }
-    private sealed class PlayerDto { public int x, y; public bool attached; public int entryDir; }
-    private sealed class EntityDto { public int type; public int x, y; public int rot; }
+
+    private sealed class PlayerDto
+    {
+        public int x { get; set; }
+        public int y { get; set; }
+        public bool attached { get; set; }
+        public int entryDir { get; set; }
+    }
+
+    private sealed class EntityDto
+    {
+        public int type { get; set; }
+        public int x { get; set; }
+        public int y { get; set; }
+        public int rot { get; set; }
+    }
 
     // ---------- Session ----------
 
@@ -70,16 +89,15 @@ public partial class Exports
         {
             win = false; lose = false;
 
-            var before = CloneState(_cur);         // snapshot for undo
-            var res = Engine.Step(_cur, d);        // mutates _cur
+            var before = CloneState(_cur);    // snapshot for undo
+            var res = Engine.Step(_cur, d);   // mutates _cur
 
-            // Heuristic: AttemptAction is always added; if we have >1 delta, something happened.
+            // AttemptAction is always added; if >1 delta, something meaningful happened.
             bool moved = res.Deltas != null && res.Deltas.Count > 1;
 
             win = res.Win;
             lose = res.GameOver;
 
-            // Record undo only if meaningful (or terminal)
             if (moved || win || lose)
                 _undo.Push(before);
 
@@ -105,7 +123,7 @@ public partial class Exports
             int h = _cur.Grid.H;
             var tiles = new int[w * h];
 
-            // very simple tile mapping for now; expand as needed
+            // basic tile mapping; expand as needed
             for (int y = 0; y < h; y++)
                 for (int x = 0; x < w; x++)
                 {
@@ -145,18 +163,17 @@ public partial class Exports
                     attached = _cur.AttachedEntityId != null,
                     entryDir = _cur.EntryDir.HasValue ? (int)_cur.EntryDir.Value : -1
                 },
-                entities = ents
+                entities = ents ?? new List<EntityDto>(0)
             };
         }
     }
 
     // ---------- local clone (no DeepClone() in your model) ----------
-    // Adapted from your solver’s BruteForceSolverReplay.CloneState
     private static GameState CloneState(GameState s)
     {
         var c = new GameState
         {
-            Grid = s.Grid, // grid is immutable recipe per level; safe to share
+            Grid = s.Grid, // grid is immutable per level; safe to share
             PlayerPos = s.PlayerPos,
             AttachedEntityId = s.AttachedEntityId,
             EntryDir = s.EntryDir,
@@ -182,6 +199,7 @@ public partial class Exports
         }
         foreach (var kv in s.EntityAt)
             c.EntityAt[kv.Key] = kv.Value;
+
         return c;
     }
 }
