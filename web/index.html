@@ -1,0 +1,60 @@
+<body>
+  <div style="font-family:system-ui;padding:8px">
+  <textarea id="levelJson" rows="6" style="width:100%"></textarea><br>
+  <button id="load">Load</button>
+  <button id="n">N</button><button id="e">E</button>
+  <button id="s">S</button><button id="w">W</button>
+  <pre id="state" style="max-height:200px;overflow:auto"></pre>
+  <canvas id="grid" width="384" height="384" style="border:1px solid #999"></canvas>
+</div>
+
+<script type="module">
+  import { initWasm } from './core/wasm-adapter.js';
+  const base = new URL('./wasm/', import.meta.url).href;
+  const api = await initWasm(base);
+  let sid = null;
+
+  const ta = document.querySelector('#levelJson');
+  const pre = document.querySelector('#state');
+  const cvs = document.querySelector('#grid');
+  const ctx = cvs.getContext('2d');
+
+  document.querySelector('#load').onclick = () => { sid = api.initLevel(ta.value); draw(); };
+  document.querySelector('#n').onclick = () => doMove(0);
+  document.querySelector('#e').onclick = () => doMove(1);
+  document.querySelector('#s').onclick = () => doMove(2);
+  document.querySelector('#w').onclick = () => doMove(3);
+
+  window.addEventListener('keydown', e => {
+    if (!sid) return;
+    const map = { ArrowUp:0, KeyW:0, ArrowRight:1, KeyD:1, ArrowDown:2, KeyS:2, ArrowLeft:3, KeyA:3 };
+    if (e.code in map) { e.preventDefault(); doMove(map[e.code]); }
+  });
+
+  function doMove(d) {
+    const r = api.step(sid, d);
+    draw();
+    if (r.win) alert('WIN!');
+    if (r.lose) alert('LOSE!');
+  }
+
+  function draw() {
+    const s = api.getState(sid);
+    pre.textContent = JSON.stringify(s, null, 2);
+    const cell = Math.floor(Math.min(cvs.width / s.w, cvs.height / s.h));
+    ctx.clearRect(0,0,cvs.width,cvs.height);
+    for (let y=0;y<s.h;y++) for (let x=0;x<s.w;x++) {
+      const t = s.tiles[y*s.w+x];
+      ctx.fillStyle = t===1 ? '#333' : (t===2 ? '#58a' : '#ddd');
+      ctx.fillRect(x*cell, y*cell, cell-1, cell-1);
+    }
+    ctx.fillStyle = '#c93';
+    for (const e of s.entities) {
+      ctx.fillRect(e.x*cell+2, e.y*cell+2, cell-4, cell-4);
+    }
+    ctx.fillStyle = '#e22';
+    ctx.fillRect(s.player.x*cell+3, s.player.y*cell+3, cell-6, cell-6);
+  }
+</script>
+
+</body>

@@ -1,0 +1,65 @@
+{
+  "mainAssemblyName": "EngineWasm.dll",
+  "resources": {
+    "hash": "sha256-b3zHSjzLQD7t2SN7y+E7b3zszJy9FiGtYcvpIdhHWlQ=",
+    "jsModuleNative": {
+      "dotnet.native.js": "sha256-0JCfTbIoTI/xTi4mk+gdSz5/tx9fQGAoQrvASklbTW0="
+    },
+    "jsModuleRuntime": {
+      "dotnet.runtime.js": "sha256-yfXUv1l/B489E8p12JxUvxly0JvHL9CCsoZUDlfGH9c="
+    },
+    "wasmNative": {
+      "dotnet.native.wasm": "sha256-2yFVbgUGVcUe4QRsq6TS6pJcey/0qNXG5h1Jql9XO7I="
+    },
+    "wasmSymbols": {
+      "dotnet.native.js.symbols": "sha256-LwLd8wyynf0sZOGuAJX+1KDfOf74TgDOiI/jsV7cYcM="
+    },
+    "coreAssembly": {
+      "System.Private.CoreLib.wasm": "sha256-+QHLzuJpxtdb9gmmKQzhGOGQjCUmhldCR5nnr477JjI=",
+      "System.Runtime.InteropServices.JavaScript.wasm": "sha256-46EslAlUY8PCFPNNdxh6xyl1tMDibDGNP8Izg1454zo="
+    },
+    "assembly": {
+      "EngineWasm.wasm": "sha256-PyQqowPHRws1LSxYD20N00RV9c+4vIQL+6TiWX1TrOo=",
+      "Microsoft.CSharp.wasm": "sha256-ryDw//xUZqDKiPicitXZdoCC/DqxMyqEM9Mmfsy7TJo=",
+      "Newtonsoft.Json.wasm": "sha256-1qqij+EracfCnzvEd6+z4Fmt3XQalwYLJ+3iUAEkrkA=",
+      "System.Collections.Concurrent.wasm": "sha256-ojKUDvrb7KwaUX9fTVo5Z1m5IshAS0JLGcPk7xxoD98=",
+      "System.Collections.wasm": "sha256-lOA7GJpan1BjUOHeMIrp7fCFCxtvjSSpo7o2UwE5SZ0=",
+      "System.Collections.NonGeneric.wasm": "sha256-oRCCNRziwXmiW0QtIb4s0Gh/23cWIUHdLfgDpCPD77w=",
+      "System.Collections.Specialized.wasm": "sha256-m0gukM4Gv10GzbzH1otPxVCc5gmCDJDGWgjyN47cIjk=",
+      "System.ComponentModel.wasm": "sha256-pYLaBeWMzy5oE2tWeKNL/PMnam15+r4QjbORp+HRYME=",
+      "System.ComponentModel.Primitives.wasm": "sha256-MVwVAN0/pY6PPbr9gsRyHdt+xbUQGXAhV2WUXQKHy7A=",
+      "System.ComponentModel.TypeConverter.wasm": "sha256-WrpHKlb9QrdaNRXb8Np7nUN+I8iM/9Qj08smcLmPlw8=",
+      "System.Data.Common.wasm": "sha256-wQzU+fGd8Ml7Pj1EUZ2bLWeLP61wrcyz6dFgP0yGH6E=",
+      "System.Diagnostics.DiagnosticSource.wasm": "sha256-X8GRK2kyaCYrvHDMMpZah01/45/agEOGsEGDme3FoYc=",
+      "System.Diagnostics.TraceSource.wasm": "sha256-4rAwFKJYZjBNewKc5sRpsLyo93fq7nL8d//L0EjolnY=",
+      "System.wasm": "sha256-xMF0eauQ5DkSzUozHLFFMQnL6DSJO09nJLtgag+Dzbw=",
+      "System.Drawing.wasm": "sha256-wL9hReRO6JYKohMUiK0ts3ylL9+ypSji+KSFfJSuofA=",
+      "System.Drawing.Primitives.wasm": "sha256-1vzMD2gzMo9B2ZqsLLRz3WqsjFkqF27Mv7TPZVfYNBM=",
+      "System.IO.Pipelines.wasm": "sha256-dQmdDR+pxChbIIpvJ/sWron3nFOyicejY/UauIsEBx0=",
+      "System.Linq.wasm": "sha256-J7PBN+THkJl8Y6UCHVxIdlDWoe8Mvoqmk5a68JLXPWg=",
+      "System.Linq.Expressions.wasm": "sha256-MfpR4rpcFUR7en+JvP1VqGPeTWd3liYOizEN2z9Tnxg=",
+      "System.Memory.wasm": "sha256-1wSreqIKltjdo9sH9daAwazEvRNfszviE6FVONKUtiQ=",
+      "System.Net.Http.wasm": "sha256-rBD+DabarTx4SqO4bY5UH5zrOa8IdTkVA+MvtBY/Uh0=",
+      "System.Net.Primitives.wasm": "sha256-VsWTEOyEbltVNWebWtzswCEfVLEN7seHoNS6agRLaJw=",
+      "System.ObjectModel.wasm": "sha256-6In4QoX/WJc5J3w18mbUIu2fTMAU1DPlTuudVHGiR7A=",
+      "System.Private.Uri.wasm": "sha256-HA/M3TigWuTQquYmFBULGq6VKTMB+/7Vk8AROcjkID8=",
+      "System.Private.Xml.wasm": "sha256-N/gQ6v2Ff3W0iXbQ8aYBUZrDFXKT5QCRn0M3JznXZXo=",
+      "System.Private.Xml.Linq.wasm": "sha256-AyWFqVemYo0tQ0Vl2XLRPZfRO/eT2cP5bfboHNoF8iE=",
+      "System.Runtime.Numerics.wasm": "sha256-rpFuNSjjLwdUgRpjAYvQvvDp7/5xe0gQJTmmJ6SHcp4=",
+      "System.Runtime.Serialization.Formatters.wasm": "sha256-nWnrr0foLa1WDpDPnPGou4yUHBtKQd5g1pBA0dNnRjw=",
+      "System.Runtime.Serialization.Primitives.wasm": "sha256-yxmDLIilFRFGGh38YZy6oGeigTM2POb9etjyENeOCg0=",
+      "System.Security.Cryptography.wasm": "sha256-3K0xteQgYG2Ctpw5pJHFHlNrUzjWEc1q570uY+25Jpw=",
+      "System.Text.Encodings.Web.wasm": "sha256-zwtDqHTy1ddq/CszEvcMvx/aiOWjhi80D/6gUn8d+I0=",
+      "System.Text.Json.wasm": "sha256-wxiFAAmO2TI5tQP+Bka8OALfXkLCXVtpwvwB+VRqlBQ=",
+      "System.Text.RegularExpressions.wasm": "sha256-Z2g7s3qAkZCMe4uEEkF4bWE1x/Obl3KtvXMC31MDADE=",
+      "System.Xml.Linq.wasm": "sha256-5claBNmyy8L12DFLS17Fh4SBiTjwhYts3ds7g8dX8Gc="
+    },
+    "coreVfs": {
+      "runtimeconfig.bin": {
+        "supportFiles/0_runtimeconfig.bin": "sha256-j8dmK7YPHHTbkS+ZwJixur+jBDk8AnCzB1le9oZbtDQ="
+      }
+    }
+  },
+  "debugLevel": 0,
+  "globalizationMode": "invariant"
+}
