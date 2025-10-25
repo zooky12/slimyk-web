@@ -7,75 +7,174 @@
   <pre id="state" style="max-height:200px;overflow:auto"></pre>
   <canvas id="grid" width="384" height="384" style="border:1px solid #999"></canvas>
 </div>
+<button id="save">Save JSON</button>
+<input id="loadFile" type="file" accept=".json" />
+
+<div style="display:flex;gap:12px;align-items:center;margin:8px 0">
+  <button id="modeBtn" data-mode="play">Mode: Play</button>
+
+  <select id="tool">
+    <option value="tile">Tile</option>
+    <option value="entity">Entity</option>
+    <option value="remove">Remove Entity</option>
+    <option value="rotate">Rotate (brush)</option>
+  </select>
+
+  <label>Tile: <select id="tileSel"></select></label>
+  <label>Entity: <select id="entSel"></select></label>
+  <span id="modeHint" style="opacity:.7;font-size:.9em"></span>
+</div>
+
+
+
+<style>
+  #modeBtn[data-mode="edit"] { background:#ffe08a; }
+</style>
+
 
 <script type="module">
   import { initWasm } from './core/wasm-adapter.js';
+  import { canvasInit, canvasDrawState, canvasResizeToGrid } from './canvas.js';
+  import { hudBind, hudLoad, hudStep, hudUndo, hudReset } from './hud.js';
+
   const base = new URL('./wasm/', import.meta.url).href;
   const api = await initWasm(base);
+  window.api = api; // <-- now you can call api.getTiles() in the console
+
   let sid = null;
+  let lastState = null;
+  let mode = 'play'; // 'play' | 'edit'
+  let lastRot = 0;
 
-  const ta = document.querySelector('#levelJson');
-  const pre = document.querySelector('#state');
-  const cvs = document.querySelector('#grid');
-  const ctx = cvs.getContext('2d');
+  const modeBtn  = document.getElementById('modeBtn');
+  const modeHint = document.getElementById('modeHint');
+  const tool     = document.getElementById('tool');
+  const tileSel  = document.getElementById('tileSel');
+  const entSel   = document.getElementById('entSel');
 
-  const toGridY = (sy) => (s.h - 1 - sy); 
+  function setMode(next) {
+    mode = next;
+    modeBtn.dataset.mode = mode;
+    modeBtn.textContent = `Mode: ${mode[0].toUpperCase()}${mode.slice(1)}`;
+    modeHint.textContent = (mode === 'edit')
+      ? 'Click the grid to paint tiles/entities. Press R to rotate brush.'
+      : 'Use arrows/WASD to move. Ctrl/Cmd+Z = undo, R = reset.';
+  }
 
-  document.querySelector('#load').onclick = () => { sid = api.initLevel(ta.value);
-const s0 = api.getState(sid);
-console.log('INIT STATE:', s0);
-draw(); };
-  document.querySelector('#n').onclick = () => doMove(0);
-  document.querySelector('#e').onclick = () => doMove(1);
-  document.querySelector('#s').onclick = () => doMove(2);
-  document.querySelector('#w').onclick = () => doMove(3);
+  modeBtn.onclick = () => setMode(mode === 'play' ? 'edit' : 'play');
+  setMode('play'); // default
 
-  window.addEventListener('keydown', e => {
-    if (!sid) return;
-    const map = { ArrowUp:0, KeyW:0, ArrowRight:1, KeyD:1, ArrowDown:2, KeyS:2, ArrowLeft:3, KeyA:3 };
-    if (e.code in map) { e.preventDefault(); doMove(map[e.code]); }
+
+  const tiles = api.getTiles();      // requires wasm-adapter to expose getTiles()
+  const ents  = api.getEntities();   // requires getEntities()
+
+  console.log('tiles:', tiles, 'entities:', ents); // quick sanity
+  for (const t of tiles) {
+    const o = document.createElement('option');
+    o.value = t.id; o.textContent = t.name;
+    tileSel.appendChild(o);
+  }
+  for (const e of ents) {
+    const o = document.createElement('option');
+    o.value = e.id; o.textContent = e.name;
+    entSel.appendChild(o);
+  }
+
+  // bind canvas
+  const cvs = document.getElementById('grid');
+  canvasInit(cvs);
+
+  // connect HUD to engine & draw callback
+  hudBind(api, (state) => {
+    if (!state || !state.w) return;
+    // (optional) fixed cell size, e.g. 32; or compute to fit
+    canvasResizeToGrid(state.w, state.h, 32);
+    canvasDrawState(state);
   });
 
-  function doMove(d) {
-    const r = api.step(sid, d);
-    draw();
-    if (r.win) alert('WIN!');
-    if (r.lose) alert('LOSE!');
+  // load button
+  document.getElementById('load').onclick = () => {
+    const txt = document.getElementById('levelJson').value;
+    hudLoad(txt);
+  };
+
+  // movement buttons
+  document.getElementById('n').onclick = () => (mode==='play' && hudStep(0));
+  document.getElementById('e').onclick = () => (mode==='play' && hudStep(1));
+  document.getElementById('s').onclick = () => (mode==='play' && hudStep(1));
+  document.getElementById('w').onclick = () => (mode==='play' && hudStep(3));
+
+  document.getElementById('save').onclick = () => {
+    const json = JSON.stringify(lastState, null, 2); // quick: from DTO (or add a proper Level_ToJson export later)
+    const blob = new Blob([json], { type: 'application/json' });
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'level.json' });
+    a.click(); URL.revokeObjectURL(a.href);
+  };
+
+  document.getElementById('loadFile').onchange = async (e) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    const txt = await file.text();
+    hudLoad(txt);
+  };
+
+
+  // keys
+  window.addEventListener('keydown', e => {
+    if (!sid || !lastState) return;
+
+    if (mode === 'play') {
+      const m = { ArrowUp:0, KeyW:0, ArrowRight:1, KeyD:1, ArrowDown:2, KeyS:2, ArrowLeft:3, KeyA:3 };
+      if (m[e.code] !== undefined) { e.preventDefault(); hudStep(m[e.code]); return; }
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') { e.preventDefault(); hudUndo(); return; }
+      if (e.code === 'KeyR') { e.preventDefault(); hudReset(); return; }
+    } else { // edit mode
+      if (e.code === 'KeyR') { e.preventDefault(); lastRot = (lastRot + 1) & 3; return; }
+    }
+  });
+
+  //let lastState = null;
+  window.setSid = (s) => sid = s;
+  window.getState = () => lastState;
+
+  function update(state) {
+    lastState = state;
+    if (!state || !state.w) return;
+    canvasResizeToGrid(state.w, state.h, 32);
+    canvasDrawState(state);
   }
 
-  function draw() {
-    const s = api.getState(sid);
-    if (!s || !s.w || !s.h) return;
+  // hook the HUD callback to use update()
+  hudBind(api, update);
 
-    const cell = Math.floor(Math.min(cvs.width / s.w, cvs.height / s.h));
-    const toScreenY = (gy) => (s.h - 1 - gy); // <-- flip Y for rendering
-
-    ctx.clearRect(0,0,cvs.width,cvs.height);
-
-    // tiles
-    for (let gy = 0; gy < s.h; gy++) {
-      for (let gx = 0; gx < s.w; gx++) {
-        const t = s.tiles[gy*s.w + gx] ?? 0;
-        const sy = toScreenY(gy);
-        ctx.fillStyle = t===1 ? '#333' : (t===2 ? '#58a' : t===3 ? '#7c7' : '#ddd');
-        ctx.fillRect(gx*cell, sy*cell, cell-1, cell-1);
-      }
-    }
-
-    // entities
-    const ents = Array.isArray(s.entities) ? s.entities : [];
-    ctx.fillStyle = '#c93';
-    for (const e of ents) {
-      const sy = toScreenY(e.y);
-      ctx.fillRect(e.x*cell+2, sy*cell+2, cell-4, cell-4);
-    }
-
-    // player
-    const p = s.player ?? { x:0, y:0 };
-    const py = toScreenY(p.y);
-    ctx.fillStyle = '#e22';
-    ctx.fillRect(p.x*cell+3, py*cell+3, cell-6, cell-6);
+  // convert mouse coords → grid coords (remember Y-flip)
+  function screenToGrid(ev) {
+    const rect = cvs.getBoundingClientRect();
+    const cell = Math.floor(Math.min(cvs.width / lastState.w, cvs.height / lastState.h));
+    const gx = Math.floor((ev.clientX - rect.left) / cell);
+    const sy = Math.floor((ev.clientY - rect.top) / cell);
+    const gy = (lastState.h - 1 - sy); // unflip
+    return { gx, gy };
   }
+
+  cvs.addEventListener('click', (ev) => {
+    if (!sid || !lastState || mode !== 'edit') return;
+    const { gx, gy } = screenToGrid(ev);
+
+    const modeTool = tool.value;
+    if (modeTool === 'tile') {
+      api.applyEdit(sid, /*kind*/0, gx, gy, parseInt(tileSel.value,10), lastRot);
+    } else if (modeTool === 'entity') {
+      api.applyEdit(sid, /*kind*/1, gx, gy, parseInt(entSel.value,10), lastRot);
+    } else if (modeTool === 'remove') {
+      api.applyEdit(sid, /*kind*/2, gx, gy, 0, 0);
+    } else if (modeTool === 'rotate') {
+      lastRot = (lastRot + 1) & 3; // brush rotate without placing
+    }
+    update(api.getState(sid));
+  });
+
+
 </script>
+
 
 </body>

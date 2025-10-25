@@ -10,8 +10,14 @@ export async function initWasm(base = '/wasm/') {
   return {
     initLevel: (json) => ex.Exports.Engine_Init(json),
     getState:  (sid)  => JSON.parse(ex.Exports.Engine_GetState(sid)),
-    step:      (sid, dir) => JSON.parse(ex.Exports.Engine_Step(sid, dir)), // {moved,win,lose}
+    step:      (sid, dir) => JSON.parse(ex.Exports.Engine_Step(sid, dir)),
     undo:      (sid)  => ex.Exports.Engine_Undo(sid),
     reset:     (sid)  => ex.Exports.Engine_Reset(sid),
+
+    getTiles:     () => JSON.parse(ex.Exports.Catalog_GetTiles()),
+    getEntities:  () => JSON.parse(ex.Exports.Catalog_GetEntities()),
+    applyEdit: (sid, kind, x, y, type, rot) =>
+        JSON.parse(ex.Exports.Level_ApplyEdit(sid, kind, x, y, type, rot)),
   };
+
 }

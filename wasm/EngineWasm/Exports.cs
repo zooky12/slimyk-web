@@ -75,6 +75,7 @@ public partial class Exports
 
     private sealed class Session
     {
+        public GameState StateRef() => _cur;
         private readonly GameState _start;
         private GameState _cur;
         private readonly Stack<GameState> _undo = new();
@@ -89,19 +90,48 @@ public partial class Exports
         {
             win = false; lose = false;
 
-            var before = CloneState(_cur);    // snapshot for undo
-            var res = Engine.Step(_cur, d);   // mutates _cur
+            // Take a snapshot for undo
+            var before = CloneState(_cur);
 
-            // AttemptAction is always added; if >1 delta, something meaningful happened.
-            bool moved = res.Deltas != null && res.Deltas.Count > 1;
+            // Run one input; Engine mutates _cur and returns deltas/flags
+            var res = Engine.Step(_cur, d);
 
             win = res.Win;
             lose = res.GameOver;
 
-            if (moved || win || lose)
+            // Robust "did anything actually change?"
+            bool changed = !ShallowEqual(before, _cur);
+
+            // Record undo if something changed OR we hit a terminal flag
+            if (changed || win || lose)
                 _undo.Push(before);
 
-            return moved;
+            return changed;
+        }
+
+        private static bool ShallowEqual(GameState a, GameState b)
+        {
+            if (a.PlayerPos.x != b.PlayerPos.x || a.PlayerPos.y != b.PlayerPos.y) return false;
+            if (a.EntryDir != b.EntryDir) return false;
+            if ((a.AttachedEntityId ?? -1) != (b.AttachedEntityId ?? -1)) return false;
+            if (a.AnyButtonPressed != b.AnyButtonPressed) return false;
+            if (a.Win != b.Win || a.GameOver != b.GameOver) return false;
+
+            if (a.EntitiesById.Count != b.EntitiesById.Count) return false;
+
+            // assume same keys; compare per-entity position & orientation
+            foreach (var kv in a.EntitiesById)
+            {
+                var id = kv.Key;
+                if (!b.EntitiesById.TryGetValue(id, out var be)) return false;
+
+                var ae = kv.Value;
+                if (ae.Pos.x != be.Pos.x || ae.Pos.y != be.Pos.y) return false;
+                if (ae.Orientation != be.Orientation) return false;
+                if (ae.Type != be.Type) return false; // types should match
+            }
+
+            return true;
         }
 
         public bool Undo()
@@ -202,4 +232,42 @@ public partial class Exports
 
         return c;
     }
+    // ---------- Builder: Palette ----------
+    [JSExport]
+    public static string Catalog_GetTiles()
+    {
+        var list = new List<object>();
+        foreach (TileType tt in System.Enum.GetValues(typeof(TileType)))
+        {
+            // skip "None" if you have it
+            if ((int)tt == 0) continue;
+            list.Add(new { id = (int)tt, name = tt.ToString() });
+        }
+        return JsonSerializer.Serialize(list);
+    }
+
+    [JSExport]
+    public static string Catalog_GetEntities()
+    {
+        var list = new List<object>();
+        foreach (EntityType et in System.Enum.GetValues(typeof(EntityType)))
+        {
+            // include the ones you want initially
+            if (et == EntityType.PlayerSpawn || et == EntityType.BoxBasic)
+                list.Add(new { id = (int)et, name = et.ToString() });
+        }
+        return JsonSerializer.Serialize(list);
+    }
+
+    // ---------- Builder: Apply edits ----------
+    // kind: 0=tile-set, 1=entity-place, 2=entity-remove, 3=entity-rotate
+    [JSExport]
+    public static string Level_ApplyEdit(string sid, int kind, int x, int y, int type, int rot)
+    {
+        var s = Sessions[sid].StateRef(); // add a small helper to Session (below)
+        string err = "";
+        bool ok = EditOps.Apply(s, kind, x, y, type, rot, out err);
+        return JsonSerializer.Serialize(new { ok, err });
+    }
+
 }
