@@ -1,0 +1,45 @@
+{
+  "size": {
+    "rows": 3,
+    "cols": 4
+  },
+  "base": [
+    [
+      "hole",
+      "wall",
+      "hole",
+      "wall"
+    ],
+    [
+      "floor",
+      "exit",
+      "floor",
+      "floor"
+    ],
+    [
+      "pressurePlate",
+      "floor",
+      "floor",
+      "slimPathFloor"
+    ]
+  ],
+  "entities": [
+    {
+      "type": "heavyBox",
+      "x": 2,
+      "y": 2
+    },
+    {
+      "type": "player",
+      "x": 2,
+      "y": 1,
+      "state": {
+        "mode": "free",
+        "entryDir": {
+          "dx": 0,
+          "dy": 0
+        }
+      }
+    }
+  ]
+}

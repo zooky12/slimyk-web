@@ -1,35 +1,4 @@
 ﻿// ui/hud.js
-// hud.js
-let _api = null, _sid = null, _onState = () => {};
-export function hudBind(api, onState) { _api = api; _onState = onState; }
-export function hudSetSession(sid) { _sid = sid; }
-
-export function hudLoad(jsonText) {
-  _sid = _api.initLevel(jsonText);
-  _onState(_api.getState(_sid));
-}
-
-export function hudStep(dir) {
-  if (!_sid) return;
-  const r = _api.step(_sid, dir);
-  const s = _api.getState(_sid);
-  _onState(s);
-  // (optional) notify win/lose somewhere nicer than alerts
-  if (r.win) console.log('WIN');
-  if (r.lose) console.log('LOSE');
-}
-
-export function hudUndo() {
-  if (!_sid) return;
-  _api.undo(_sid);
-  _onState(_api.getState(_sid));
-}
-export function hudReset() {
-  if (!_sid) return;
-  _api.reset(_sid);
-  _onState(_api.getState(_sid));
-}
-
 export function setupHUD({
   onToggleBuildMode, onUndo, onReset,
   onToggleSolver, onRefreshLevels, onLoadLevel,

@@ -1,23 +1,19 @@
-using System;
+﻿using System;
 using SlimeGrid.Logic;
 
 namespace SlimeGrid.Logic
 {
-    // keep this for clarity if you want to use it internally
-    public enum EditKind : int { SetTile = 0, PlaceEntity = 1, Remove = 2, MovePlayer = 3 }
+    // Editor/runtime level edit helpers for GameState
+    // Kinds are intentionally minimal and orthogonal.
+    public enum EditKind : int { SetTile = 0, PlaceEntity = 1, Remove = 2, MovePlayer = 3, RotateEntity = 4 }
 
     public static class EditOps
     {
-        // ---- Overload used by Exports.cs (matches your current call site) ----
+        // Overload for loosely-typed callers (e.g., JS bridge)
         public static bool Apply(GameState s, int kind, int x, int y, int type, int rot, out string err)
-        {
-            string errLocal = "";
-            var ok = Apply(s, (EditKind)kind, x, y, type, rot, out errLocal);
-            err = errLocal;
-            return ok;
-        }
+            => Apply(s, (EditKind)kind, x, y, type, rot, out err);
 
-        // ---- Strongly-typed core (with err message) ----
+        // Strongly-typed core
         public static bool Apply(GameState s, EditKind kind, int x, int y, int id, int rot, out string err)
         {
             err = "";
@@ -28,23 +24,18 @@ namespace SlimeGrid.Logic
             {
                 case EditKind.SetTile:
                     return SetTile(s, p, (TileType)id, (Orientation)rot, out err);
-
                 case EditKind.PlaceEntity:
                     return PlaceEntity(s, p, (EntityType)id, (Orientation)rot, out err);
-
                 case EditKind.Remove:
                     return RemoveAt(s, p, out err);
-
                 case EditKind.MovePlayer:
                     return MovePlayer(s, p, out err);
-
+                case EditKind.RotateEntity:
+                    return RotateEntity(s, p, id, (Orientation)rot, out err);
                 default:
-                    err = "Unknown edit kind";
-                    return false;
+                    err = "Unknown edit kind"; return false;
             }
         }
-
-        // ---------- operations ----------
 
         static bool SetTile(GameState s, V2 p, TileType t, Orientation rot, out string err)
         {
@@ -55,27 +46,17 @@ namespace SlimeGrid.Logic
             cell.Type = t;
             cell.Orientation = rot;
 
-            // same mask recipe logic as Loader.ApplyRecipeToCell
+            // same recipe logic as in Loader
             var def = TileTraits.For(t);
             ApplyRecipeToCell(ref cell, def);
-
             s.Grid.SetCell(p, cell);
 
-            // Optional guard: if an entity stands here and tile stops entities, reject.
-            // (comment out if you want to allow turning a walkable tile into a blocker under an entity)
+            // Guards: reject turning a walkable tile into a blocker under occupants
             var tileMask = TraitsUtil.ResolveTileMask(s, p);
             if ((tileMask & Traits.StopsEntity) != 0 && s.EntityAt.ContainsKey(p))
-            {
-                err = "Entity present; tile stops entities";
-                return false;
-            }
-
-            // Optional guard: if player stands here and tile stops player, reject.
+            { err = "Entity present; tile stops entities"; return false; }
             if ((tileMask & Traits.StopsPlayer) != 0 && s.PlayerPos.Equals(p))
-            {
-                err = "Player on tile; tile stops player";
-                return false;
-            }
+            { err = "Player on tile; tile stops player"; return false; }
 
             return changed;
         }
@@ -83,88 +64,90 @@ namespace SlimeGrid.Logic
         static bool PlaceEntity(GameState s, V2 p, EntityType type, Orientation rot, out string err)
         {
             err = "";
+            // Special-case: PlayerSpawn is metadata; do not create a runtime entity
+            if (type == EntityType.PlayerSpawn)
+            {
+                if (s.HasEntityAt(p)) { err = "Occupied"; return false; }
+                var tileMask = TraitsUtil.ResolveTileMask(s, p);
+                if ((tileMask & Traits.StopsPlayer) != 0) { err = "Tile blocks player"; return false; }
+                s.PlayerPos = p; s.AttachedEntityId = null; s.EntryDir = null; return true;
+            }
+
             if (s.EntityAt.ContainsKey(p)) { err = "Spot occupied"; return false; }
-
-            // Don’t place on tiles that stop entities
-            var tileMask = TraitsUtil.ResolveTileMask(s, p);
-            if ((tileMask & Traits.StopsEntity) != 0) { err = "Tile blocks entities"; return false; }
-
-            // Don’t place where the player currently is
+            var tmask = TraitsUtil.ResolveTileMask(s, p);
+            if ((tmask & Traits.StopsEntity) != 0) { err = "Tile blocks entities"; return false; }
             if (s.PlayerPos.Equals(p)) { err = "Player present"; return false; }
 
-            // Spawn with your catalog signature, then set orientation if needed
-            var e = EntityCatalog.Spawn(s, type, p); // (GameState, EntityType, V2)
-            e.Orientation = rot;                     // set after spawn
-
-            // Special-case: if placing PlayerSpawn, also move the player here
-            if (type == EntityType.PlayerSpawn)
-                s.PlayerPos = p;
-
+            var e = EntityCatalog.Spawn(s, type, p);
+            e.Orientation = rot;
             return true;
         }
 
         static bool RemoveAt(GameState s, V2 p, out string err)
         {
             err = "";
-            // Remove entity if present
             if (s.EntityAt.TryGetValue(p, out var id))
             {
-                if (s.AttachedEntityId.HasValue && s.AttachedEntityId.Value == id)
-                {
-                    s.AttachedEntityId = null;
-                    s.EntryDir = null;
-                }
-                s.EntityAt.Remove(p);
-                s.EntitiesById.Remove(id);
+                if (s.AttachedEntityId == id) { s.AttachedEntityId = null; s.EntryDir = null; }
+                s.EntityAt.Remove(p); s.EntitiesById.Remove(id);
                 return true;
             }
 
-            // Otherwise, reset tile back to Floor (or do nothing if you prefer)
+            // Reset tile to Floor if not already
             ref var cell = ref s.Grid.CellRef(p);
             if (cell.Type != TileType.Floor)
             {
-                cell.Type = TileType.Floor;
-                cell.Orientation = Orientation.N;
+                cell.Type = TileType.Floor; cell.Orientation = Orientation.N;
                 ApplyRecipeToCell(ref cell, TileTraits.For(TileType.Floor));
                 s.Grid.SetCell(p, cell);
                 return true;
             }
 
-            err = "Nothing to remove";
-            return false;
+            err = "Nothing to remove"; return false;
         }
 
         static bool MovePlayer(GameState s, V2 p, out string err)
         {
             err = "";
-            if (!s.Grid.InBounds(p)) { err = "Out of bounds"; return false; }
-
-            var mask = TraitsUtil.ResolveEffectiveMask(s, p); // tile + occupying entity traits
+            var mask = TraitsUtil.ResolveEffectiveMask(s, p);
             if ((mask & Traits.StopsPlayer) != 0) { err = "Blocked for player"; return false; }
             if (s.HasEntityAt(p)) { err = "Entity present"; return false; }
-
-            s.PlayerPos = p;
-            s.AttachedEntityId = null;
-            s.EntryDir = null;
-            return true;
+            bool changed = !s.PlayerPos.Equals(p);
+            s.PlayerPos = p; s.AttachedEntityId = null; s.EntryDir = null;
+            return changed;
         }
 
-        // ---------- helpers ----------
+        static bool RotateEntity(GameState s, V2 p, int entityId, Orientation rot, out string err)
+        {
+            err = "";
+            Entity e = null;
+            if (entityId > 0)
+            {
+                if (!s.EntitiesById.TryGetValue(entityId, out e)) { err = "No such entity"; return false; }
+            }
+            else
+            {
+                if (!s.EntityAt.TryGetValue(p, out var idAt)) { err = "No entity at cell"; return false; }
+                e = s.EntitiesById[idAt];
+            }
+            bool changed = e.Orientation != rot;
+            e.Orientation = rot;
+            return changed;
+        }
 
+        // helpers
         static void ApplyRecipeToCell(ref Cell cell, TT recipe)
         {
             cell.ActiveMask = recipe.Active;
-            cell.InactiveMask = recipe.Inactive; // may be null
+            cell.InactiveMask = recipe.Inactive;
             cell.ToggleMask = cell.InactiveMask.HasValue ? (cell.ActiveMask ^ cell.InactiveMask.Value) : 0;
-
             if (cell.InactiveMask.HasValue)
             {
                 var cond = (cell.ActiveMask & (Traits.ToggleableByButton | Traits.ToggleableByEntity | Traits.ToggleableByPlayer));
                 cell.InactiveMask = cell.InactiveMask.Value | cond;
                 cell.ToggleMask = cell.ActiveMask ^ cell.InactiveMask.Value;
             }
-
-            cell.Toggled = false; // reset local flag; parity is stateless in reads
+            cell.Toggled = false;
         }
     }
 }

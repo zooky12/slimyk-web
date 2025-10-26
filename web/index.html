@@ -1,180 +1,529 @@
+<!doctype html>
+<html lang="ca">
+<head>
+  <script type="module" src="./main.js"></script>
+  <script type="module">
+    import { initWasm } from './core/wasm-adapter.js';
+
+    // Wait here exactly once…
+    const api = await initWasm('./wasm/');
+
+    // …then start the app with a ready api.
+    import('./app/main.js').then(mod => mod.boot(api));
+  </script>
+  <meta charset="utf-8"/>
+  <title>Box-Enter Puzzle - Modular</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    /* ——— the exact styles you provided ——— */
+    :root{color-scheme:dark;--bg-gradient:linear-gradient(135deg,#0a1328 0%,#132a54 42%,#341f63 100%);--text-primary:#e6e9ff;--text-muted:rgba(230,233,255,.7);--card-bg:rgba(11,16,33,.78);--card-border:rgba(255,255,255,.12);--input-bg:rgba(8,12,28,.7);--button-bg:rgba(255,255,255,.06);--button-border:rgba(255,255,255,.2);--button-hover:rgba(255,255,255,.14);--highlight:linear-gradient(135deg,#5f79ff 0%,#3c9dff 100%);--highlight-border:rgba(99,132,255,.65)}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;background:var(--bg-gradient);color:var(--text-primary);min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:48px 24px 64px}
+    .app-shell{width:min(1180px,100%);display:flex;flex-direction:column;gap:24px}
+    .app-header{display:flex;justify-content:space-between;align-items:flex-start}
+    .app-title{margin:0;font-size:32px;font-weight:700;letter-spacing:-.02em}
+    .tagline{margin:6px 0 0;font-size:15px;color:var(--text-muted);max-width:520px}
+    .main-grid{display:grid;gap:24px;grid-template-columns:minmax(0,520px) minmax(0,1fr);align-items:start}
+    @media (max-width:1100px){.main-grid{grid-template-columns:1fr}}
+    .card{background:var(--card-bg);border:1px solid var(--card-border);border-radius:20px;padding:20px;box-shadow:0 18px 48px rgba(0,12,40,.45);backdrop-filter:blur(16px)}
+    .stage-card{display:flex;flex-direction:column;align-items:center;gap:16px}
+    #game{width:100%;max-width:480px;border-radius:16px;border:1px solid rgba(255,255,255,.18);background:rgba(0,6,20,.48);image-rendering:pixelated;touch-action:none}
+    #bigMessage{font-size:24px;font-weight:600;text-align:center;min-height:44px;color:var(--text-primary);letter-spacing:.01em;padding:14px 18px;border-radius:16px;border:1px solid rgba(255,255,255,.12);background:rgba(8,12,28,.65);box-shadow:0 18px 38px rgba(5,14,42,.35);opacity:0;transform:translateY(-6px);transition:opacity 180ms ease,transform 220ms ease,box-shadow 220ms ease;backdrop-filter:blur(12px)}
+    #bigMessage.active{opacity:1;transform:translateY(0)}
+    #bigMessage.win{background:linear-gradient(135deg,rgba(57,189,148,.25),rgba(23,132,196,.2));border-color:rgba(96,230,168,.55);box-shadow:0 22px 48px rgba(36,177,150,.4);color:#62f2c1}
+    #bigMessage.lose{background:linear-gradient(135deg,rgba(232,82,82,.28),rgba(171,52,102,.22));border-color:rgba(255,107,107,.6);box-shadow:0 22px 48px rgba(209,69,110,.42);color:#ff8f9b}
+    .play-controls{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;width:100%}
+    .info-panel{width:100%;background:rgba(12,18,40,.7);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:12px 16px;color:var(--text-primary);box-shadow:0 14px 34px rgba(5,14,42,.28);backdrop-filter:blur(12px)}
+    .info-panel summary{cursor:pointer;list-style:none;font-weight:600;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:15px;letter-spacing:.01em}
+    .info-panel summary::marker{display:none}
+    .info-panel summary::after{content:'▾';font-size:16px;transition:transform 160ms ease;color:var(--text-muted)}
+    .info-panel[open] summary::after{transform:rotate(-180deg)}
+    .info-panel[open] summary{color:#7faaff}
+    .info-panel summary span{font-size:13px;color:var(--text-muted);font-weight:500}
+    .info-content{margin-top:14px;display:grid;gap:16px}
+    .info-section h4{margin:0 0 6px;font-size:14px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--text-muted)}
+    .info-section ul{margin:0;padding-left:18px;display:grid;gap:6px;font-size:13px;color:var(--text-primary)}
+    .info-section li{line-height:1.5}
+    .info-section dl{margin:0;display:grid;gap:8px}
+    .info-section dt{font-size:13px;font-weight:600;color:#9fb7ff}
+    .info-section dd{margin:4px 0 0 0;font-size:13px;color:var(--text-primary);line-height:1.5}
+    .control-stack{display:flex;flex-direction:column;gap:24px}
+    button,select,input{font:inherit;border-radius:12px;border:1px solid var(--button-border);background:var(--button-bg);color:var(--text-primary);padding:8px 14px;transition:background .2s ease,border-color .2s ease,transform .2s ease}
+    .levels-card select{color:var(--text-primary);background:rgba(11,16,33,.82)}
+    .levels-card select:focus{color:#11131d;background:rgba(243,245,255,.92)}
+    .levels-card select option{background-color:rgba(14,20,38,.95);color:var(--text-primary)}
+    button:hover,select:hover{background:var(--button-hover)}
+    button:active{transform:translateY(1px)}
+    button:disabled{opacity:.55;cursor:not-allowed}
+    select{min-height:40px;padding-right:36px;appearance:none;background-image:linear-gradient(45deg,transparent 50%,rgba(255,255,255,.45) 50%),linear-gradient(135deg,rgba(255,255,255,.45) 50%,transparent 50%);background-position:calc(100% - 18px) calc(50% - 3px),calc(100% - 12px) calc(50% + 3px);background-size:6px 6px,6px 6px;background-repeat:no-repeat}
+    label{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);display:flex;flex-direction:column;gap:6px}
+    .levels-card .levels-row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+    .card-title{margin:0 0 8px;font-size:20px;font-weight:600;letter-spacing:-.01em}
+    .card-subtitle{margin:2px 0 0;font-size:13px;color:var(--text-muted)}
+    .build-card .hint{margin:12px 0 0;font-size:13px;color:var(--text-muted)}
+    .build-controls{margin-top:18px;display:flex;flex-direction:column;gap:20px;border-top:1px solid rgba(255,255,255,.08);padding-top:18px}
+    .build-controls.hidden{display:none}
+    .build-groups{display:flex;flex-direction:column;gap:20px}
+    @media (min-width:720px){.build-groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}}
+    .section-label{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:8px}
+    .button-grid{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+    .build-actions{display:flex;flex-wrap:wrap;gap:10px}
+    .size-controls{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+    .size-controls .section-label{margin-bottom:4px}
+    .size-grid{display:grid;gap:8px;grid-template-columns:repeat(4,minmax(0,1fr))}
+    .size-controls button{font-size:12px;padding:6px 10px}
+    .size-compact{align-self:flex-start}
+    .dir-pad{margin-top:10px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;align-items:center;justify-items:center}
+    .dir-pad>button{width:100%}
+    .dir-pad .center{height:32px}
+    input[type="file"]{display:none}
+    .build-card.active{border-color:var(--highlight-border);box-shadow:0 22px 55px rgba(62,123,255,.35)}
+    #build-mode-btn{align-self:flex-start;padding:10px 18px;font-weight:600}
+    .solver-header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+    #toggleSolver{padding:10px 18px;font-weight:600}
+    #build-mode-btn,#toggleAuto{margin-left:auto;align-self:center}
+    #solverPanel{margin-top:18px;border-top:1px solid rgba(255,255,255,.08);padding-top:18px;display:flex;flex-direction:column;gap:16px}
+    #solverPanel.hidden{display:none}
+    .solver-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+    .solver-grid label{gap:8px}
+    .solver-grid input{background:var(--input-bg);border:1px solid var(--button-border);border-radius:10px;padding:8px 10px;color:var(--text-primary)}
+    .solver-actions{display:flex;flex-wrap:wrap;gap:10px}
+    .progress{font-size:13px;color:var(--text-muted)}
+    #solutionsList{display:flex;flex-direction:column;gap:8px;max-height:220px;overflow:auto;padding-right:4px}
+    .solutionItem{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:8px 12px;display:flex;gap:12px;align-items:center;white-space:nowrap}
+    .solutionItem .solutionText{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;min-width:0}
+    .solutionItem .solutionActions{display:flex;gap:8px}
+    .solutionItem button{margin-left:0;background:rgba(62,123,255,.25);border-color:rgba(62,123,255,.4)}
+    .solutionItem button:hover{background:rgba(62,123,255,.45)}
+    .solutionItem.deadHeader{background:rgba(36,52,90,.45);border-color:rgba(120,150,255,.35);font-weight:600}
+    .solutionItem.deadItem{background:rgba(20,26,44,.55);border-style:dashed;border-color:rgba(255,255,255,.12)}
+    .auto-card .solver-grid{margin-top:8px}
+    .tile-toggle{margin:12px 0 0;background:rgba(13,18,36,.65);border:1px solid var(--button-border);border-radius:10px;padding:8px 12px;width:100%;text-align:left;font-weight:600;color:var(--text-primary);display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+    .tile-toggle::after{content:'▾';font-size:14px;transition:transform 160ms ease;color:var(--text-muted)}
+    .tile-toggle[aria-expanded="true"]::after{transform:rotate(180deg)}
+    .tile-toggle[aria-expanded="true"]{background:var(--highlight);border-color:var(--highlight-border);color:#fff}
+    .tile-filter-panel{margin-top:6px;background:rgba(13,18,36,.55);border:1px solid var(--button-border);border-radius:10px;padding:10px 12px}
+    .tile-filter-options{margin-top:8px;display:grid;gap:6px;grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+    .build-card .build-groups{display:flex !important;flex-direction:column !important;gap:20px}
+    .build-card .tile-filter-options{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+    .tile-chip{border:1px solid var(--button-border);background:rgba(37,52,92,.4);color:var(--text-primary);border-radius:999px;padding:6px 12px;font-size:12px;text-transform:capitalize;cursor:pointer;transition:background .2s ease,border-color .2s ease,color .2s ease}
+    .tile-chip.active{background:var(--highlight);border-color:var(--highlight-border);color:#fff}
+    #autoPanel{margin-top:18px;border-top:1px solid rgba(255,255,255,.08);padding-top:18px;display:flex;flex-direction:column;gap:16px}
+    .hidden{display:none !important}
+    #build-mode-btn.active,.build-controls button.active,#toggleSolver.active,#toggleAuto.active,.auto-card .mutate-toggle.active{background:var(--highlight);color:#fff;border-color:var(--highlight-border);box-shadow:0 10px 26px rgba(62,99,255,.32)}
+  </style>
+</head>
 <body>
-  <div style="font-family:system-ui;padding:8px">
-  <textarea id="levelJson" rows="6" style="width:100%"></textarea><br>
-  <button id="load">Load</button>
-  <button id="n">N</button><button id="e">E</button>
-  <button id="s">S</button><button id="w">W</button>
-  <pre id="state" style="max-height:200px;overflow:auto"></pre>
-  <canvas id="grid" width="384" height="384" style="border:1px solid #999"></canvas>
-</div>
-<button id="save">Save JSON</button>
-<input id="loadFile" type="file" accept=".json" />
+  <div class="app-shell">
+    <div class="main-grid">
+      <section class="card stage-card">
+        <canvas id="game" width="480" height="480"></canvas>
+        <div id="bigMessage"></div>
+        <div class="play-controls">
+          <button id="reset-btn">Reset (R)</button>
+          <button id="undo-btn">Undo (E)</button>
+        </div>
 
-<div style="display:flex;gap:12px;align-items:center;margin:8px 0">
-  <button id="modeBtn" data-mode="play">Mode: Play</button>
+        <div class="card levels-card">
+          <h2 class="card-title">Level Library</h2>
+          <div class="levels-row">
+            <label for="server-worlds">World
+              <select id="server-worlds"></select>
+            </label>
+            <label for="server-levels">Level
+              <select id="server-levels"></select>
+            </label>
+            <button id="load-server">Load</button>
+            <button id="refresh-server">Refresh</button>
+            <button id="import-btn">Import JSON</button>
+            <input type="file" id="import-file" />
+            <input id="export-name" type="text" placeholder="level.json" style="max-width:200px" />
+            <button id="export-btn">Export JSON</button>
+          </div>
+        </div>
 
-  <select id="tool">
-    <option value="tile">Tile</option>
-    <option value="entity">Entity</option>
-    <option value="remove">Remove Entity</option>
-    <option value="rotate">Rotate (brush)</option>
-  </select>
+        <details class="info-panel">
+          <summary>Game Basics <span>movement · goals · hazards</span></summary>
+          <div class="info-content">
+            <!-- (kept your info sections verbatim) -->
+            <div class="info-section">
+              <h4>Basic Movement</h4>
+              <ul>
+                <li>Use <strong>W A S D</strong> to walk one tile at a time.</li>
+                <li>Walking onto a box slips you inside it; the direction you entered becomes that box's <em>entryDir</em>.</li>
+                <li>While inside a box, pressing the opposite of the entryDir launches a reverse-flight glide until something blocks you.</li>
+                <li><strong>Undo (E)</strong> steps backward through recent moves, even after pushes or flights.</li>
+              </ul>
+            </div>
+            <div class="info-section">
+              <h4>Win &amp; Lose</h4>
+              <ul>
+                <li><strong>Win</strong>: stand free on the <em>Exit</em>.</li>
+                <li><strong>Lose</strong>: fall into a hole / inbox on a fallen box.</li>
+                <li>Reset anytime with <strong>R</strong>.</li>
+              </ul>
+            </div>
+          </div>
+        </details>
+      </section>
 
-  <label>Tile: <select id="tileSel"></select></label>
-  <label>Entity: <select id="entSel"></select></label>
-  <span id="modeHint" style="opacity:.7;font-size:.9em"></span>
-</div>
+      <section class="control-stack">
+        <div class="card build-card">
+          <div class="solver-header">
+            <div>
+              <h2 class="card-title">Build Tools</h2>
+              <p class="card-subtitle">Switch tiles, entities, or resize the playable grid.</p>
+            </div>
+            <button id="build-mode-btn" aria-pressed="false">Show Build Tools</button>
+          </div>
 
+          <div class="build-controls hidden" aria-hidden="true">
+            <p class="hint">Toggle Build Tools to paint tiles or place entities. Drag across the grid to paint rapidly.</p>
 
+            <div class="build-groups">
+              <div class="build-section">
+                <button type="button" class="tile-toggle" data-target="buildTiles" aria-expanded="false">Tiles</button>
+                <div class="tile-filter-panel hidden" id="buildTiles" aria-hidden="true">
+                  <div class="tile-filter-options" id="tilesChips">
+                    <!-- Filled from engine catalog -->
+                  </div>
+                </div>
+              </div>
 
-<style>
-  #modeBtn[data-mode="edit"] { background:#ffe08a; }
-</style>
+              <div class="build-section">
+                <button type="button" class="tile-toggle" data-target="buildEntities" aria-expanded="false">Entities</button>
+                <div class="tile-filter-panel hidden" id="buildEntities" aria-hidden="true">
+                  <div class="tile-filter-options" id="entsChips">
+                    <!-- Filled from engine catalog -->
+                  </div>
+                </div>
+              </div>
+            </div>
 
+            <div class="build-actions">
+              <button id="clear-btn">Clear</button>
+              <button id="fill-floor">Fill Walls (non-reachable)</button>
+              <button id="place-one">Place 1</button>
+              <button id="remove-one">Remove 1</button>
+              <button id="simplify-keep" title="Simplify level (preserve dead ends)">Simplify (strict)</button>
+              <button id="simplify-flex" title="Simplify level (dead ends may change)">Simplify (flex)</button>
+            </div>
 
-<script type="module">
-  import { initWasm } from './core/wasm-adapter.js';
-  import { canvasInit, canvasDrawState, canvasResizeToGrid } from './canvas.js';
-  import { hudBind, hudLoad, hudStep, hudUndo, hudReset } from './hud.js';
+            <div class="size-controls">
+              <div class="section-label">Resize Grid</div>
+              <div class="levels-row">
+                <button id="compact-grid" class="size-compact">Compact Borders</button>
+                <button id="resize-add" aria-pressed="false">Add</button>
+                <button id="resize-remove" aria-pressed="false">Remove</button>
+              </div>
+              <div class="dir-pad hidden" id="dir-pad" aria-hidden="true">
+                <div></div><button id="dir-up">Up</button><div></div>
+                <button id="dir-left">Left</button><div class="center"></div><button id="dir-right">Right</button>
+                <div></div><button id="dir-down">Down</button><div></div>
+              </div>
+            </div>
+          </div>
+        </div>
 
-  const base = new URL('./wasm/', import.meta.url).href;
-  const api = await initWasm(base);
-  window.api = api; // <-- now you can call api.getTiles() in the console
+        <div class="card solver-card">
+          <div class="solver-header">
+            <div>
+              <h2 class="card-title">Solver Tools</h2>
+              <p class="card-subtitle">Search for solutions and replay them directly on the board.</p>
+            </div>
+            <button id="toggleSolver" aria-pressed="false">Show Solver</button>
+          </div>
+          <div id="solverPanel" class="hidden" aria-hidden="true">
+            <div class="solver-grid">
+              <label>Max depth <input id="solverMaxDepth" type="number" value="100" min="1"></label>
+              <label>Max nodes <input id="solverMaxNodes" type="number" value="200000" min="100"></label>
+              <label>Max solutions <input id="solverMaxSolutions" type="number" value="50" min="1"></label>
+            </div>
+            <div class="solver-actions">
+              <button id="runSolver">Run Solver</button>
+              <button id="stopSolver" disabled>Stop</button>
+            </div>
+            <div class="progress" id="solverProgress">Idle</div>
+            <div id="solutionsList"></div>
+          </div>
+        </div>
 
-  let sid = null;
-  let lastState = null;
-  let mode = 'play'; // 'play' | 'edit'
-  let lastRot = 0;
+        <div class="card auto-card">
+          <div class="solver-header">
+            <div>
+              <h2 class="card-title">Auto Creator</h2>
+              <p class="card-subtitle">Evolve the current layout into stronger puzzles.</p>
+            </div>
+            <button id="toggleAuto" aria-pressed="false">Show Auto Creator</button>
+          </div>
+          <div id="autoPanel" class="hidden" aria-hidden="true">
+            <!-- keep as-is; will wire when solver exports exist -->
+            <div class="progress" id="autoProgress">Idle</div>
+            <div id="autoList"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
 
-  const modeBtn  = document.getElementById('modeBtn');
-  const modeHint = document.getElementById('modeHint');
-  const tool     = document.getElementById('tool');
-  const tileSel  = document.getElementById('tileSel');
-  const entSel   = document.getElementById('entSel');
+  <script type="module">
+    import * as ex from './core/wasm-adapter.js';
+    import { draw, initCanvas, setRedraw, animate } from './ui/canvas.js';
+    import { setupBuildUI } from './ui/build.js';
+    import { setupHUD } from './ui/hud.js';
+    import { SFX } from './ui/sfx.js';
+    // (io.js / auto.js kept optional, only used if you click those UI bits)
+    import { loadWorldList, loadLevelListForWorld, loadLevelList, loadWorldLevel, exportLevel, importLevel } from './ui/io.js';
 
-  function setMode(next) {
-    mode = next;
-    modeBtn.dataset.mode = mode;
-    modeBtn.textContent = `Mode: ${mode[0].toUpperCase()}${mode.slice(1)}`;
-    modeHint.textContent = (mode === 'edit')
-      ? 'Click the grid to paint tiles/entities. Press R to rotate brush.'
-      : 'Use arrows/WASD to move. Ctrl/Cmd+Z = undo, R = reset.';
-  }
+    const canvasEl = document.getElementById('game');
+    initCanvas(canvasEl);
 
-  modeBtn.onclick = () => setMode(mode === 'play' ? 'edit' : 'play');
-  setMode('play'); // default
+    // DEMO JSON (your provided one)
+    const demo = `{
+      "tileGrid":[
+        ["wall","wall","wall","wall","wall","wall","wall","wall","wall","wall","wall"],
+        ["wall","hole","hole","hole","hole","hole","hole","hole","hole","hole","wall"],
+        ["wall","hole","floor","floor","floor","floor","floor","floor","floor","hole","wall"],
+        ["wall","hole","floor","hole","wall","exit","wall","hole","floor","hole","wall"],
+        ["wall","hole","floor","hole","floor","floor","floor","hole","floor","hole","wall"],
+        ["wall","hole","floor","hole","floor","hole","floor","hole","floor","hole","wall"],
+        ["wall","hole","floor","hole","floor","hole","floor","hole","floor","hole","wall"],
+        ["wall","hole","floor","hole","floor","hole","floor","hole","floor","hole","wall"],
+        ["wall","wall","floor","hole","floor","floor","floor","hole","floor","hole","wall"],
+        ["wall","hole","hole","hole","hole","hole","hole","hole","hole","hole","wall"],
+        ["spike","wall","wall","wall","wall","wall","wall","wall","wall","wall","wall"]
+      ],
+      "entities":[
+        {"type":"PlayerSpawn","x":5,"y":8},
+        {"type":"BoxBasic","x":8,"y":8},
+        {"type":"BoxBasic","x":5,"y":4},
+        {"type":"BoxBasic","x":2,"y":4}
+      ]
+    }`;
 
+    const sfx = new SFX();
+    let sid = null;              // session id in WASM
+    let buildMode = false;
+    let gameStateFlag = null;    // 'win' | 'lose' | null
+    let nextReadyAt = 0;
+    const MOVE_COOLDOWN_MS = 100;
 
-  const tiles = api.getTiles();      // requires wasm-adapter to expose getTiles()
-  const ents  = api.getEntities();   // requires getEntities()
-
-  console.log('tiles:', tiles, 'entities:', ents); // quick sanity
-  for (const t of tiles) {
-    const o = document.createElement('option');
-    o.value = t.id; o.textContent = t.name;
-    tileSel.appendChild(o);
-  }
-  for (const e of ents) {
-    const o = document.createElement('option');
-    o.value = e.id; o.textContent = e.name;
-    entSel.appendChild(o);
-  }
-
-  // bind canvas
-  const cvs = document.getElementById('grid');
-  canvasInit(cvs);
-
-  // connect HUD to engine & draw callback
-  hudBind(api, (state) => {
-    if (!state || !state.w) return;
-    // (optional) fixed cell size, e.g. 32; or compute to fit
-    canvasResizeToGrid(state.w, state.h, 32);
-    canvasDrawState(state);
-  });
-
-  // load button
-  document.getElementById('load').onclick = () => {
-    const txt = document.getElementById('levelJson').value;
-    hudLoad(txt);
-  };
-
-  // movement buttons
-  document.getElementById('n').onclick = () => (mode==='play' && hudStep(0));
-  document.getElementById('e').onclick = () => (mode==='play' && hudStep(1));
-  document.getElementById('s').onclick = () => (mode==='play' && hudStep(1));
-  document.getElementById('w').onclick = () => (mode==='play' && hudStep(3));
-
-  document.getElementById('save').onclick = () => {
-    const json = JSON.stringify(lastState, null, 2); // quick: from DTO (or add a proper Level_ToJson export later)
-    const blob = new Blob([json], { type: 'application/json' });
-    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'level.json' });
-    a.click(); URL.revokeObjectURL(a.href);
-  };
-
-  document.getElementById('loadFile').onchange = async (e) => {
-    const file = e.target.files?.[0]; if (!file) return;
-    const txt = await file.text();
-    hudLoad(txt);
-  };
-
-
-  // keys
-  window.addEventListener('keydown', e => {
-    if (!sid || !lastState) return;
-
-    if (mode === 'play') {
-      const m = { ArrowUp:0, KeyW:0, ArrowRight:1, KeyD:1, ArrowDown:2, KeyS:2, ArrowLeft:3, KeyA:3 };
-      if (m[e.code] !== undefined) { e.preventDefault(); hudStep(m[e.code]); return; }
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') { e.preventDefault(); hudUndo(); return; }
-      if (e.code === 'KeyR') { e.preventDefault(); hudReset(); return; }
-    } else { // edit mode
-      if (e.code === 'KeyR') { e.preventDefault(); lastRot = (lastRot + 1) & 3; return; }
+    function setBanner(type, text) {
+      const el = document.getElementById('bigMessage');
+      el.classList.remove('win','lose','active');
+      if (!type) { el.textContent=''; return; }
+      el.textContent = text || (type==='win'?'You Win!':'Game Over');
+      el.classList.add(type, 'active');
     }
-  });
 
-  //let lastState = null;
-  window.setSid = (s) => sid = s;
-  window.getState = () => lastState;
-
-  function update(state) {
-    lastState = state;
-    if (!state || !state.w) return;
-    canvasResizeToGrid(state.w, state.h, 32);
-    canvasDrawState(state);
-  }
-
-  // hook the HUD callback to use update()
-  hudBind(api, update);
-
-  // convert mouse coords → grid coords (remember Y-flip)
-  function screenToGrid(ev) {
-    const rect = cvs.getBoundingClientRect();
-    const cell = Math.floor(Math.min(cvs.width / lastState.w, cvs.height / lastState.h));
-    const gx = Math.floor((ev.clientX - rect.left) / cell);
-    const sy = Math.floor((ev.clientY - rect.top) / cell);
-    const gy = (lastState.h - 1 - sy); // unflip
-    return { gx, gy };
-  }
-
-  cvs.addEventListener('click', (ev) => {
-    if (!sid || !lastState || mode !== 'edit') return;
-    const { gx, gy } = screenToGrid(ev);
-
-    const modeTool = tool.value;
-    if (modeTool === 'tile') {
-      api.applyEdit(sid, /*kind*/0, gx, gy, parseInt(tileSel.value,10), lastRot);
-    } else if (modeTool === 'entity') {
-      api.applyEdit(sid, /*kind*/1, gx, gy, parseInt(entSel.value,10), lastRot);
-    } else if (modeTool === 'remove') {
-      api.applyEdit(sid, /*kind*/2, gx, gy, 0, 0);
-    } else if (modeTool === 'rotate') {
-      lastRot = (lastRot + 1) & 3; // brush rotate without placing
+    function doRedraw(){
+      if (!sid) return;
+      const dto = ex.getState(sid);
+      draw(dto);
     }
-    update(api.getState(sid));
-  });
+    setRedraw(doRedraw);
 
+    // Boot WASM and init demo
+    await ex.initWasm();
+    sid = ex.initLevel(demo);
+    doRedraw();
 
-</script>
+    // ——— Controls ———
+    document.getElementById('reset-btn').onclick = ()=>{ if(!sid) return; ex.reset(sid); setBanner(null); doRedraw(); };
+    document.getElementById('undo-btn').onclick  = ()=>{ if(!sid) return; ex.undo(sid); setBanner(null); doRedraw(); };
 
+    function stepDir(idx){
+      if (!sid || buildMode) return;
+      if (Date.now() < nextReadyAt) return;
+      const r = ex.step(sid, idx);
+      if (r.moved) sfx.moveFree();
+      if (r.win)   { setBanner('win'); sfx.winJingle(); }
+      else if (r.lose){ setBanner('lose'); sfx.loseTone(); }
+      else setBanner(null);
+      doRedraw();
+      nextReadyAt = Date.now() + MOVE_COOLDOWN_MS;
+    }
 
+    // Keys
+    window.addEventListener('keydown', (e)=>{
+      const key = e.key.toLowerCase();
+      const ae = document.activeElement;
+      const typing = ae && ((ae.tagName==='INPUT' && !['button','checkbox','radio','submit','reset'].includes(ae.type)) || ae.tagName==='TEXTAREA' || ae.isContentEditable);
+      if (typing) return;
+
+      if (key==='r'){ e.preventDefault(); document.getElementById('reset-btn').click(); return; }
+      if (key==='e'){ e.preventDefault(); document.getElementById('undo-btn').click(); return; }
+      if (buildMode) return;
+
+      if (key==='w') stepDir(0);
+      else if (key==='d') stepDir(1);
+      else if (key==='s') stepDir(2);
+      else if (key==='a') stepDir(3);
+    });
+
+    // Swipe
+    (function(){
+      let t0=null;
+      const min=20;
+      canvasEl.addEventListener('touchstart', e=>{ if(buildMode) return; const t=e.touches[0]; t0={x:t.clientX,y:t.clientY}; }, {passive:true});
+      canvasEl.addEventListener('touchend', e=>{
+        if(buildMode || !t0) return;
+        const t=e.changedTouches[0]; const dx=t.clientX-t0.x, dy=t.clientY-t0.y; t0=null;
+        if (Math.hypot(dx,dy)<min) return;
+        if (Math.abs(dx)>Math.abs(dy)) stepDir(dx>0?1:3); else stepDir(dy>0?2:0);
+      }, {passive:true});
+    })();
+
+    // HUD (build toggle, solver toggle, io, etc.)
+    setupHUD({
+      onToggleBuildMode(){
+        buildMode = !buildMode;
+        const panel = document.querySelector('.build-controls');
+        const btn = document.getElementById('build-mode-btn');
+        const card = document.querySelector('.build-card');
+        panel.classList.toggle('hidden', !buildMode);
+        panel.setAttribute('aria-hidden', buildMode?'false':'true');
+        btn.classList.toggle('active', buildMode);
+        btn.setAttribute('aria-pressed', buildMode?'true':'false');
+        btn.textContent = buildMode ? 'Hide Build Tools' : 'Show Build Tools';
+        if (card) card.classList.toggle('active', buildMode);
+      },
+      onUndo(){ if(!sid) return; ex.undo(sid); setBanner(null); doRedraw(); },
+      onReset(){ if(!sid) return; ex.reset(sid); setBanner(null); doRedraw(); },
+      onToggleSolver(){
+        const panel = document.getElementById('solverPanel');
+        const btn = document.getElementById('toggleSolver');
+        panel.classList.toggle('hidden');
+        const open = !panel.classList.contains('hidden');
+        panel.setAttribute('aria-hidden', open?'false':'true');
+        btn.classList.toggle('active', open);
+        btn.setAttribute('aria-pressed', open?'true':'false');
+        btn.textContent = open ? 'Hide Solver' : 'Show Solver';
+      },
+      onRefreshLevels: refreshWorldsDropdown,
+      onLoadLevel: async ()=>{
+        const wsel=document.getElementById('server-worlds'); const lsel=document.getElementById('server-levels');
+        const world=(wsel&&wsel.value)||'.'; const name=lsel.value; if(!name) return;
+        const json = await loadWorldLevel(world,name);
+        sid = ex.initLevel(JSON.stringify(json));
+        setBanner(null); doRedraw();
+      },
+      onExport: (name)=>{
+        if (!sid) return;
+        const dto = ex.getState(sid);
+        // basic convert back to Loader.json shape
+        const out = dtoToLevel(dto);
+        exportLevel(out, name);
+      },
+      onImport: async (file)=>{
+        const json = await importLevel(file);
+        sid = ex.initLevel(JSON.stringify(json));
+        setBanner(null); doRedraw();
+      },
+      onRunSolver: async ()=>{
+        // TODO: wire when C# solver is exported.
+        document.getElementById('solverProgress').textContent='Solver not wired yet.';
+      },
+      onStopSolver: ()=>{},
+      onPlaySolution: ()=>{},
+      onExportSolution: ()=>{}
+    });
+
+    // Populate catalogs from engine (for chips list)
+    try{
+      const tiles = ex.getTiles?.() || [];
+      const ents  = ex.getEntities?.() || [];
+      const tilesBox = document.getElementById('tilesChips');
+      const entsBox  = document.getElementById('entsChips');
+      const mk=(text,attr,val)=>{
+        const b=document.createElement('button'); b.type='button'; b.className='tile-chip'; b.textContent=text; b.dataset[attr]=val; return b;
+      };
+      tiles.forEach(t=> tilesBox?.appendChild(mk(t,'tile',t)));
+      ents.forEach(e=> entsBox?.appendChild(mk(e,'entity',e)));
+    }catch{}
+
+    // Build painting (routes get/set to WASM)
+    setupBuildUI({
+      canvasEl,
+      getState: ()=> sid ? ex.getState(sid) : null,
+      setState: (dto)=> { if (!sid) return; ex.replaceState(sid, dto); doRedraw(); },
+      onModified: ()=>{},
+      onSnapshot: ()=>{/* undo is handled on C# side only for moves; for edits your build.js can push client-side snapshots if needed */},
+      requestRedraw: doRedraw,
+      isBuildMode: ()=> buildMode
+    });
+
+    // Level library helpers
+    async function refreshWorldsDropdown(){
+      const worlds = await loadWorldList();
+      const wsel = document.getElementById('server-worlds');
+      const lsel = document.getElementById('server-levels');
+      if (!wsel || !lsel) return;
+      wsel.innerHTML=''; lsel.innerHTML='';
+      if (!worlds || worlds.length===0 || (worlds.length===1 && worlds[0]==='.')){
+        const wrap = wsel.closest('label'); if (wrap) wrap.style.display='none';
+        const list = await loadLevelList();
+        if (!list?.length){ const o=document.createElement('option'); o.textContent='(no levels found)'; lsel.appendChild(o); }
+        else list.forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; lsel.appendChild(o); });
+        return;
+      }
+      const wrap = wsel.closest('label'); if (wrap) wrap.style.display='';
+      worlds.forEach(w=>{ const o=document.createElement('option'); o.value=w; o.textContent=w; wsel.appendChild(o); });
+      await refreshLevelDropdown(wsel.value||worlds[0]);
+    }
+    async function refreshLevelDropdown(world){
+      const list = await loadLevelListForWorld(world);
+      const sel = document.getElementById('server-levels'); sel.innerHTML='';
+      if (!list?.length){ const o=document.createElement('option'); o.textContent='(no levels found)'; sel.appendChild(o); }
+      else list.forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; sel.appendChild(o); });
+    }
+    document.getElementById('refresh-server').onclick = refreshWorldsDropdown;
+    document.getElementById('load-server').onclick = ()=> document.querySelector('.levels-card button#load-server').blur();
+
+    // Import/Export buttons
+    document.getElementById('import-btn').onclick = ()=> document.getElementById('import-file').click();
+    document.getElementById('import-file').addEventListener('change', async (e)=>{
+      const file=e.target.files?.[0]; if(!file) return;
+      const json = await importLevel(file);
+      sid = ex.initLevel(JSON.stringify(json));
+      setBanner(null); doRedraw();
+    });
+    document.getElementById('export-btn').onclick = ()=>{
+      if (!sid) return;
+      const name = (document.getElementById('export-name').value || 'level.json').trim();
+      const dto = ex.getState(sid);
+      exportLevel(dtoToLevel(dto), name);
+    };
+
+    // Convert DrawDto back to Loader JSON (simple mapping; adjust if needed)
+    function dtoToLevel(dto){
+      const names = ['floor','wall','hole','exit']; // must match your Exports mapping
+      const grid=[];
+      for(let y=0;y<dto.h;y++){
+        const row=[];
+        for(let x=0;x<dto.w;x++){
+          const idx = dto.tiles[y*dto.w+x] || 0;
+          row.push(names[idx] || 'floor');
+        }
+        grid.push(row);
+      }
+      const ents=[];
+      // player
+      ents.push({ type:'PlayerSpawn', x:dto.player.x, y:dto.player.y });
+      for(const e of dto.entities||[]){
+        let name='BoxBasic';
+        if (e.type===2) name='BoxHeavy';
+        else if (e.type===3) name='TriBox';
+        else if (e.type===4) name='FragileWall';
+        ents.push({ type:name, x:e.x, y:e.y });
+      }
+      return { tileGrid:grid, entities:ents };
+    }
+
+    // Kick off library list
+    refreshWorldsDropdown();
+    const wsel = document.getElementById('server-worlds');
+    if (wsel) wsel.addEventListener('change', async ()=>{ await refreshLevelDropdown(wsel.value||'.'); });
+  </script>
 </body>
+</html>

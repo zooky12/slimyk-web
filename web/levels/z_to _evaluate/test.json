@@ -1,0 +1,72 @@
+{
+  "size": {
+    "rows": 5,
+    "cols": 5
+  },
+  "base": [
+    [
+      "floor",
+      "floor",
+      "floor",
+      "exit",
+      "wall"
+    ],
+    [
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "hole"
+    ],
+    [
+      "floor",
+      "floor",
+      "floor",
+      "pressurePlate",
+      "grile"
+    ],
+    [
+      "slimPathFloor",
+      "floor",
+      "floor",
+      "floor",
+      "holeSpikes"
+    ],
+    [
+      "spikes",
+      "floor",
+      "floor",
+      "floor",
+      "slimPathHole"
+    ]
+  ],
+  "entities": [
+    {
+      "type": "fragileWall",
+      "x": 3,
+      "y": 2
+    },
+    {
+      "type": "heavyBox",
+      "x": 0,
+      "y": 2
+    },
+    {
+      "type": "box",
+      "x": 0,
+      "y": 1
+    },
+    {
+      "type": "player",
+      "x": 1,
+      "y": 3,
+      "state": {
+        "mode": "free",
+        "entryDir": {
+          "dx": 0,
+          "dy": 0
+        }
+      }
+    }
+  ]
+}

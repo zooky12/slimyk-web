@@ -1,0 +1,63 @@
+{
+  "size": {
+    "rows": 4,
+    "cols": 7
+  },
+  "base": [
+    [
+      "floor",
+      "floor",
+      "wall",
+      "floor",
+      "floor",
+      "floor",
+      "floor"
+    ],
+    [
+      "hole",
+      "wall",
+      "hole",
+      "wall",
+      "hole",
+      "wall",
+      "hole"
+    ],
+    [
+      "floor",
+      "wall",
+      "floor",
+      "exit",
+      "floor",
+      "floor",
+      "floor"
+    ],
+    [
+      "floor",
+      "wall",
+      "pressurePlate",
+      "floor",
+      "floor",
+      "wall",
+      "floor"
+    ]
+  ],
+  "entities": [
+    {
+      "type": "player",
+      "x": 6,
+      "y": 2,
+      "state": {
+        "mode": "free",
+        "entryDir": {
+          "dx": 0,
+          "dy": 0
+        }
+      }
+    },
+    {
+      "type": "heavyBox",
+      "x": 4,
+      "y": 3
+    }
+  ]
+}

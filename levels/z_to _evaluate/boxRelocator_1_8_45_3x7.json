@@ -1,0 +1,69 @@
+{
+  "size": {
+    "rows": 3,
+    "cols": 7
+  },
+  "base": [
+    [
+      "floor",
+      "hole",
+      "hole",
+      "floor",
+      "pressurePlate",
+      "wall",
+      "wall"
+    ],
+    [
+      "grile",
+      "floor",
+      "exit",
+      "floor",
+      "floor",
+      "floor",
+      "floor"
+    ],
+    [
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "floor",
+      "wall",
+      "wall"
+    ]
+  ],
+  "entities": [
+    {
+      "type": "box",
+      "x": 0,
+      "y": 1
+    },
+    {
+      "type": "box",
+      "x": 3,
+      "y": 1
+    },
+    {
+      "type": "box",
+      "x": 4,
+      "y": 1
+    },
+    {
+      "type": "player",
+      "x": 5,
+      "y": 1,
+      "state": {
+        "mode": "free",
+        "entryDir": {
+          "dx": 0,
+          "dy": 0
+        }
+      }
+    },
+    {
+      "type": "heavyBox",
+      "x": 6,
+      "y": 1
+    }
+  ]
+}

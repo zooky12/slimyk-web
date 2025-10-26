@@ -1,0 +1,203 @@
+{
+  "size": {
+    "rows": 12,
+    "cols": 12
+  },
+  "base": [
+    [
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor"
+    ],
+    [
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor"
+    ],
+    [
+      "floor",
+      "floor",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "floor",
+      "floor",
+      "floor",
+      "floor"
+    ],
+    [
+      "floor",
+      "floor",
+      "wall",
+      "hole",
+      "floor",
+      "hole",
+      "floor",
+      "wall",
+      "wall",
+      "wall",
+      "floor",
+      "floor"
+    ],
+    [
+      "floor",
+      "floor",
+      "wall",
+      "hole",
+      "floor",
+      "floor",
+      "floor",
+      "exit",
+      "slimPathHole",
+      "wall",
+      "floor",
+      "floor"
+    ],
+    [
+      "floor",
+      "floor",
+      "wall",
+      "hole",
+      "floor",
+      "floor",
+      "hole",
+      "wall",
+      "wall",
+      "wall",
+      "floor",
+      "floor"
+    ],
+    [
+      "floor",
+      "floor",
+      "wall",
+      "hole",
+      "floor",
+      "floor",
+      "spikes",
+      "wall",
+      "floor",
+      "floor",
+      "floor",
+      "floor"
+    ],
+    [
+      "floor",
+      "floor",
+      "wall",
+      "hole",
+      "floor",
+      "floor",
+      "wall",
+      "wall",
+      "floor",
+      "floor",
+      "floor",
+      "floor"
+    ],
+    [
+      "floor",
+      "floor",
+      "wall",
+      "hole",
+      "hole",
+      "floor",
+      "wall",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor"
+    ],
+    [
+      "floor",
+      "floor",
+      "wall",
+      "wall",
+      "wall",
+      "hole",
+      "wall",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor"
+    ],
+    [
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "wall",
+      "wall",
+      "wall",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor"
+    ],
+    [
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor"
+    ]
+  ],
+  "entities": [
+    {
+      "type": "box",
+      "x": 6,
+      "y": 4
+    },
+    {
+      "type": "box",
+      "x": 5,
+      "y": 5
+    },
+    {
+      "type": "box",
+      "x": 5,
+      "y": 6
+    },
+    {
+      "type": "player",
+      "x": 4,
+      "y": 3,
+      "state": {
+        "mode": "free",
+        "x": 4,
+        "y": 3
+      }
+    }
+  ]
+}

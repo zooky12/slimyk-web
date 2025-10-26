@@ -1,0 +1,55 @@
+{
+  "size": {
+    "rows": 3,
+    "cols": 4
+  },
+  "base": [
+    [
+      "grile",
+      "hole",
+      "hole",
+      "pressurePlate"
+    ],
+    [
+      "slimPathFloor",
+      "exit",
+      "floor",
+      "floor"
+    ],
+    [
+      "pressurePlate",
+      "floor",
+      "pressurePlate",
+      "slimPathFloor"
+    ]
+  ],
+  "entities": [
+    {
+      "type": "heavyBox",
+      "x": 2,
+      "y": 2
+    },
+    {
+      "type": "player",
+      "x": 2,
+      "y": 1,
+      "state": {
+        "mode": "free",
+        "entryDir": {
+          "dx": 0,
+          "dy": 0
+        }
+      }
+    },
+    {
+      "type": "box",
+      "x": 1,
+      "y": 2
+    },
+    {
+      "type": "heavyBox",
+      "x": 3,
+      "y": 1
+    }
+  ]
+}

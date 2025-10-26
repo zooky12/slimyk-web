@@ -1,0 +1,45 @@
+{
+  "size": {
+    "rows": 3,
+    "cols": 3
+  },
+  "base": [
+    [
+      "floor",
+      "floor",
+      "floor"
+    ],
+    [
+      "floor",
+      "floor",
+      "floor"
+    ],
+    [
+      "floor",
+      "floor",
+      "floor"
+    ]
+  ],
+  "entities": [
+    {
+      "type": "triBox",
+      "x": 1,
+      "y": 1,
+      "state": {
+        "orient": "SE"
+      }
+    },
+    {
+      "type": "player",
+      "x": 1,
+      "y": 0,
+      "state": {
+        "mode": "free",
+        "entryDir": {
+          "dx": 0,
+          "dy": 0
+        }
+      }
+    }
+  ]
+}

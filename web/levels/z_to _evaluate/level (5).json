@@ -1,0 +1,86 @@
+{
+  "size": {
+    "rows": 4,
+    "cols": 4
+  },
+  "base": [
+    [
+      "hole",
+      "exit",
+      "floor",
+      "floor"
+    ],
+    [
+      "hole",
+      "floor",
+      "floor",
+      "floor"
+    ],
+    [
+      "floor",
+      "hole",
+      "floor",
+      "hole"
+    ],
+    [
+      "floor",
+      "floor",
+      "floor",
+      "floor"
+    ]
+  ],
+  "entities": [
+    {
+      "type": "player",
+      "x": 0,
+      "y": 2,
+      "state": {
+        "mode": "free",
+        "entryDir": {
+          "dx": 0,
+          "dy": 0
+        }
+      }
+    },
+    {
+      "type": "triBox",
+      "x": 1,
+      "y": 0,
+      "state": {
+        "orient": "NW"
+      }
+    },
+    {
+      "type": "triBox",
+      "x": 2,
+      "y": 0,
+      "state": {
+        "orient": "NW"
+      }
+    },
+    {
+      "type": "triBox",
+      "x": 3,
+      "y": 1,
+      "state": {
+        "orient": "NW"
+      }
+    },
+    {
+      "type": "triBox",
+      "x": 2,
+      "y": 3,
+      "state": {
+        "orient": "SW"
+      }
+    },
+    {
+      "type": "triBox",
+      "x": 3,
+      "y": 0,
+      "state": {
+        "orient": "NW"
+      }
+    }
+  ]
+}
