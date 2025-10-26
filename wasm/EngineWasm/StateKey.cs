@@ -91,7 +91,7 @@ namespace SlimeGrid.Tools.Solver
                 c = a.Pos.x.CompareTo(b.Pos.x); if (c != 0) return c;
                 c = a.Pos.y.CompareTo(b.Pos.y); if (c != 0) return c;
                 c = ((int)a.Orientation).CompareTo((int)b.Orientation); if (c != 0) return c;
-                return a.Traits.CompareTo(b.Traits);
+                return 0; // ignore Traits for canonical ordering
             });
 
             // Map entity id -> canonical index
@@ -110,12 +110,10 @@ namespace SlimeGrid.Tools.Solver
                 Mix(ref h1, (ulong)(byte)e.Type);
                 Mix(ref h1, (ulong)(uint)e.Pos.x); Mix(ref h1, (ulong)(uint)e.Pos.y);
                 Mix(ref h1, (ulong)(byte)e.Orientation);
-                Mix(ref h1, (ulong)e.Traits);
 
                 Mix(ref h2, (ulong)(byte)e.Type * 1315423911UL);
                 Mix(ref h2, (ulong)(((uint)e.Pos.x << 16) ^ (uint)(e.Pos.y)));
                 Mix(ref h2, (ulong)(byte)e.Orientation * 1099511628211UL);
-                Mix(ref h2, (ulong)e.Traits ^ 0x9E3779B97F4A7C15UL);
             }
 
             // 4) Toggle parity signature (derived from positions)

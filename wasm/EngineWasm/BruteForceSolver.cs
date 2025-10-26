@@ -48,16 +48,23 @@ namespace SlimeGrid.Tools.Solver
 
             var sw = Stopwatch.StartNew();
 
-            var visited = new HashSet<StateKey>(4096);
+            // Track minimal depth seen for each visited state to avoid pruning shorter revisits
+            var visited = new Dictionary<StateKey, int>(4096);
             var solutionsRaw = new List<PackedMoves>(256);
+            var pathByKey = new Dictionary<StateKey, PackedMoves>(4096);
+            var processed = new HashSet<StateKey>(4096);
+            var goals = new HashSet<StateKey>();
+            var adj = new Dictionary<StateKey, HashSet<StateKey>>(4096);
+            var rev = new Dictionary<StateKey, HashSet<StateKey>>(4096);
             var deadEnds = new List<PackedMoves>(1024);
 
             var rootKey = StateHasher.Compute(initial, ctx);
-            visited.Add(rootKey);
+            visited[rootKey] = 0;
 
             int nodes = 1;
             int maxDepth = 0;
             bool nodesHit = false, depthHit = false, timeHit = false;
+            int bestSolutionLen = int.MaxValue;
 
             var path = new PackedMoves(128);
             var stack = new Stack<Frame>(256);
@@ -104,12 +111,13 @@ namespace SlimeGrid.Tools.Solver
                     continue;
                 }
 
-                bool fresh = visited.Add(childKey);
-                if (!fresh)
+                int newDepth = path.Length + 1;
+                if (visited.TryGetValue(childKey, out var seenDepth) && seenDepth <= newDepth)
                 {
-                    // revisit; ignore
+                    // revisit not better; ignore
                     continue;
                 }
+                visited[childKey] = newDepth;
 
                 frame.HadFreshChild = true;
                 stack.Pop(); stack.Push(frame); // update frame on stack
@@ -126,6 +134,7 @@ namespace SlimeGrid.Tools.Solver
                 {
                     // Record solution (shortest to this terminal due to visited pruning)
                     solutionsRaw.Add(path.Snapshot());
+                    if (path.Length < bestSolutionLen) bestSolutionLen = path.Length;
                     // Mark win for this subtree and backtrack one step (pop path handled in finish block)
                     // Set on top frame to propagate when it finishes its children
                     var top = stack.Pop();
@@ -138,6 +147,13 @@ namespace SlimeGrid.Tools.Solver
                 if (child.GameOver)
                 {
                     // Terminal but not a dead end by definition; just backtrack
+                    path.Pop();
+                    continue;
+                }
+
+                // Prune if we already have a solution and this path can't be shorter
+                if (bestSolutionLen != int.MaxValue && path.Length >= bestSolutionLen)
+                {
                     path.Pop();
                     continue;
                 }
@@ -202,6 +218,168 @@ namespace SlimeGrid.Tools.Solver
                 report.deadEndsNearTop1Count = nearTop1;
                 report.deadEndsNearTop3Count = nearTop3;
             }
+
+            report.solvedTag = finished ? (filtered.Count > 0 ? "true" : "false") : "capped";
+            return report;
+        }
+
+        // Breadth-first variant prioritizing shortest paths and speed on simple levels
+        public static SolverReport AnalyzeBfs(GameState initial, SolverConfig cfg)
+        {
+            var ctx = StateHasher.BuildLevelContext(initial.Grid);
+            var report = new SolverReport
+            {
+                solverVersion = "bf-bfs-1",
+                dirOrder = "N,E,S,W",
+                caps = new CapsInfo
+                {
+                    nodesCap = cfg.NodesCap,
+                    depthCap = cfg.DepthCap,
+                    timeCapSeconds = cfg.TimeCapSeconds,
+                    timeCapEnabled = cfg.EnforceTimeCap
+                },
+                level = new LevelHeader { width = initial.Grid.W, height = initial.Grid.H, levelHash = ComputeLevelHash(initial) }
+            };
+
+            if (!PrecheckHasExitReachableByWalls(initial))
+            {
+                report.solvedTag = "false";
+                report.elapsedSeconds = 0;
+                return report;
+            }
+
+            var sw = Stopwatch.StartNew();
+            var visited = new Dictionary<StateKey, int>(4096);
+            var solutionsRaw = new List<PackedMoves>(256);
+            var pathByKey = new Dictionary<StateKey, PackedMoves>(4096);
+            var processed = new HashSet<StateKey>(4096);
+            var goals = new HashSet<StateKey>();
+            var adj = new Dictionary<StateKey, HashSet<StateKey>>(4096);
+            var rev = new Dictionary<StateKey, HashSet<StateKey>>(4096);
+
+            var rootKey = StateHasher.Compute(initial, ctx);
+            visited[rootKey] = 0;
+
+            int nodes = 0;
+            int maxDepth = 0;
+            bool nodesHit = false, depthHit = false, timeHit = false;
+
+            var q = new Queue<(GameState state, StateKey key, PackedMoves path, int depth)>();
+            var rootPathBfs = new PackedMoves(64);
+            q.Enqueue((CloneState(initial), rootKey, rootPathBfs, 0));
+            pathByKey[rootKey] = rootPathBfs;
+
+            while (q.Count > 0)
+            {
+                if (cfg.EnforceTimeCap && sw.Elapsed.TotalSeconds > cfg.TimeCapSeconds)
+                { timeHit = true; break; }
+
+                var (state, key, path, depth) = q.Dequeue();
+                nodes++;
+                if (nodes >= cfg.NodesCap) { nodesHit = true; break; }
+                if (depth >= cfg.DepthCap) { depthHit = true; continue; }
+
+                foreach (var dir in DIRS)
+                {
+                    var child = CloneState(state);
+                    var _ = Engine.Step(child, dir);
+                    var childKey = StateHasher.Compute(child, ctx);
+                    if (childKey.Equals(key)) continue;
+
+                    int newDepth = depth + 1;
+                    if (visited.TryGetValue(childKey, out var seenDepth) && seenDepth <= newDepth) continue;
+                    visited[childKey] = newDepth;
+
+                    var next = path.Snapshot(); next.Push((byte)dir);
+                    if (next.Length > maxDepth) maxDepth = next.Length;
+                    pathByKey[childKey] = next;
+
+                    // Build adjacency excluding losing edges
+                    if (!child.GameOver)
+                    {
+                        if (!adj.TryGetValue(key, out var outs)) { outs = new HashSet<StateKey>(); adj[key] = outs; }
+                        outs.Add(childKey);
+                        if (!rev.TryGetValue(childKey, out var parents)) { parents = new HashSet<StateKey>(); rev[childKey] = parents; }
+                        parents.Add(key);
+                    }
+
+                    if (child.GameOver) continue;
+                    if (child.Win)
+                    {
+                        solutionsRaw.Add(next);
+                        goals.Add(childKey);
+                        continue;
+                    }
+                    q.Enqueue((child, childKey, next, newDepth));
+                }
+                // Mark expanded
+                processed.Add(key);
+            }
+
+            sw.Stop();
+            report.elapsedSeconds = sw.Elapsed.TotalSeconds;
+            report.nodesExplored = nodes;
+            report.maxDepthReached = maxDepth;
+            report.caps.nodesHit = nodesHit;
+            report.caps.depthHit = depthHit;
+            report.caps.timeHit = timeHit;
+
+            bool finished = q.Count == 0 && !nodesHit && !depthHit && !timeHit;
+
+            report.solutionsTotalCount = solutionsRaw.Count;
+            var filtered = SolutionFilter.FilterSimilar(solutionsRaw);
+            report.solutionsFilteredCount = filtered.Count;
+            for (int i = 0; i < Math.Min(10, filtered.Count); i++)
+            {
+                var s = filtered[i];
+                report.topSolutions.Add(new SolutionEntry { length = s.Length, movesPacked = s.Snapshot().Buffer });
+            }
+
+            // Dead-end detection using reverse BFS from goals
+            var solvable = new HashSet<StateKey>(goals);
+            var rq = new Queue<StateKey>();
+            foreach (var g in goals) rq.Enqueue(g);
+            while (rq.Count > 0)
+            {
+                var cur = rq.Dequeue();
+                if (!rev.TryGetValue(cur, out var parents)) continue;
+                foreach (var p in parents)
+                {
+                    if (solvable.Add(p)) rq.Enqueue(p);
+                }
+            }
+
+            var deadEndKeys = new HashSet<StateKey>();
+            foreach (var kv in adj)
+            {
+                var parent = kv.Key; var outs = kv.Value;
+                if (!solvable.Contains(parent)) continue;
+                foreach (var child in outs)
+                {
+                    if (solvable.Contains(child)) continue;
+                    if (!processed.Contains(child)) continue;
+                    bool hasEscape = false;
+                    if (adj.TryGetValue(child, out var outs2))
+                    {
+                        foreach (var o in outs2) { if (solvable.Contains(o)) { hasEscape = true; break; } }
+                    }
+                    if (!hasEscape) deadEndKeys.Add(child);
+                }
+            }
+
+            report.deadEndsCount = deadEndKeys.Count;
+            if (deadEndKeys.Count > 0)
+            {
+                double sumLen = 0;
+                foreach (var k in deadEndKeys)
+                {
+                    if (pathByKey.TryGetValue(k, out var pm)) sumLen += pm.Length;
+                }
+                report.deadEndsAverageDepth = sumLen / deadEndKeys.Count;
+            }
+            else report.deadEndsAverageDepth = 0;
+            report.deadEndsNearTop1Count = 0;
+            report.deadEndsNearTop3Count = 0;
 
             report.solvedTag = finished ? (filtered.Count > 0 ? "true" : "false") : "capped";
             return report;

@@ -73,6 +73,9 @@ const api = {
   resize: (add, dir) => resizeLocal(add, dir),
 };
 
+// Expose for console debugging
+try { window.api = api; } catch {}
+
 // Local resize fallback: build a LevelDTO from current state, transform, then setState
 function resizeLocal(add, dir) {
   try {
@@ -300,6 +303,7 @@ setupHUD({
     requestRedraw();
   },
   onRunSolver: async ({ maxDepth, maxNodes, onProgress, onSolutions }) => {
+    try { console.debug && console.debug('[main] onRunSolver start'); } catch {}
     try {
       const cfg = {
         depthCap: Number(maxDepth) || 100,
@@ -307,30 +311,90 @@ setupHUD({
         timeCapSeconds: 10.0,
         enforceTimeCap: false,
       };
-      const report = await raw.solverAnalyze(api.getState(), cfg);
+      const hasFn = (raw && typeof raw.solverAnalyze === 'function');
+      try { console.debug && console.debug('[main] solverAnalyze present?', hasFn); } catch {}
+      if (typeof api.__debugExports === 'function') {
+        try { const dbg = await api.__debugExports(); console.debug && console.debug('[main] __debugExports', dbg); } catch {}
+      }
+      if (!hasFn) throw new Error('Solver_Analyze not available (no export)');
+      const levelDto = toLevelDTO(api.getState());
+      const report = await raw.solverAnalyze(levelDto, cfg);
+      try { console.debug && console.debug('Solver report:', report); } catch {}
       // Unpack topSolutions -> moves strings
-      const unpackMoves = (bytes, length) => {
+      const unpackMovesPacked = (bytes, length) => {
         const dirToChar = ['w','d','s','a']; // N,E,S,W
+        if (!bytes || length <= 0) return '';
+        let arr;
+        if (typeof bytes === 'string') {
+          // base64 string -> Uint8Array
+          try {
+            const bin = atob(bytes);
+            arr = new Uint8Array(bin.length);
+            for (let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+          } catch { arr = []; }
+        } else if (Array.isArray(bytes)) {
+          arr = bytes;
+        } else if (bytes && typeof bytes.length === 'number') {
+          arr = Array.from(bytes);
+        } else {
+          arr = [];
+        }
         const out = [];
         for (let i=0;i<length;i++) {
           const byteIdx = i >> 2;
           const shift = (i & 3) * 2;
-          const mv = (bytes[byteIdx] >> shift) & 0b11;
-          out.push(dirToChar[mv]);
+          const mv = ((arr[byteIdx] || 0) >> shift) & 0b11;
+          out.push(dirToChar[mv] || '');
         }
         return out.join('');
       };
-      const solutions = (report.topSolutions || []).map(e => ({ length: e.length|0, moves: unpackMoves(e.movesPacked||[], e.length|0) }));
-      const deadEnds = []; // not surfaced in report entries; we keep stats only
-      const stats = { nodesExpanded: report.nodesExplored|0 };
-      onSolutions && onSolutions({ solutions, deadEnds, stats });
+      const pickSolutionsArray = (rep) => rep?.topSolutions || rep?.TopSolutions || rep?.solutions || rep?.Solutions || [];
+      const top = pickSolutionsArray(report);
+      const solutions = top.map(e => {
+        const len = (e.length ?? e.Length) | 0;
+        const mstr = e.moves || e.Moves;
+        const packed = e.movesPacked ?? e.MovesPacked;
+        const moves = typeof mstr === 'string' && mstr ? mstr : unpackMovesPacked(packed, len);
+        return { length: len, moves };
+      }).sort((a,b)=> (a.length|0) - (b.length|0));
+      const stats = { nodesExpanded: (report.nodesExplored ?? report.NodesExplored ?? report.nodes ?? report.Nodes) | 0 };
+      onSolutions && onSolutions({ solutions, deadEnds: [], stats, reportRaw: report });
     } catch (err) {
+      try { console.error && console.error('[main] onRunSolver error', err); } catch {}
       onProgress && onProgress('Error: ' + (err?.message || String(err)));
     }
   },
   onStopSolver: () => {},
-  onPlaySolution: () => {},
-  onExportSolution: () => {},
+  onPlaySolution: async (moves) => {
+    try {
+      if (!moves || typeof moves !== 'string') return;
+      // Start from current state; if you prefer, call api.reset() here
+      const map = { 'w':0, 'd':1, 's':2, 'a':3 };
+      for (const ch of moves) {
+        const dir = map[ch];
+        if (dir == null) continue;
+        const r = api.step(dir);
+        if (r && (r.win || r.lose)) {
+          setBanner(r.win ? 'win' : 'lose');
+          requestRedraw();
+          break;
+        }
+        requestRedraw();
+        await new Promise(r => setTimeout(r, 140));
+      }
+    } catch {}
+  },
+  onExportSolution: (moves) => {
+    try {
+      if (!moves || typeof moves !== 'string') return;
+      const data = { moves, length: moves.length };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'solution.json'; a.click();
+      URL.revokeObjectURL(url);
+    } catch {}
+  },
 });
 
 // Keyboard controls (WASD/Arrows)
@@ -386,3 +450,31 @@ export default api;
     if (refreshBtn) refreshBtn.click();
   } catch {}
 })();
+// Convert the current DrawDto (api.getState) to Loader LevelDTO schema
+function toLevelDTO(draw) {
+  const w = draw.w | 0, h = draw.h | 0;
+  const tileGrid = Array.from({ length: h }, (_, y) => new Array(w));
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const id = draw.tiles[y * w + x];
+      tileGrid[y][x] = tileIdToName[id] || 'Floor';
+    }
+  }
+  const entities = [];
+  // Represent player as a PlayerSpawn entity for Loader
+  if (draw.player && Number.isInteger(draw.player.x) && Number.isInteger(draw.player.y)) {
+    entities.push({ type: 'PlayerSpawn', x: draw.player.x, y: draw.player.y });
+  }
+  // Copy other entities mapping id->name and orientation if present
+  for (const e of (draw.entities || [])) {
+    const name = entIdToName[e.type];
+    if (!name || name === 'PlayerSpawn') continue;
+    const out = { type: name, x: e.x|0, y: e.y|0 };
+    if (Number.isInteger(e.rot)) {
+      const rotNames = ['N','E','S','W'];
+      out.orientation = rotNames[(e.rot|0) & 3];
+    }
+    entities.push(out);
+  }
+  return { width: w, height: h, tileGrid, entities };
+}

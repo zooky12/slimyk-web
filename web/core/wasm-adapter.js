@@ -140,8 +140,29 @@ export async function initWasm(baseUrl) {
         }
         const binder = runtime && (runtime.BINDING || runtime.binding || (runtime.mono_bind_static_method && { bind_static_method: runtime.mono_bind_static_method }));
         if (binder && typeof binder.bind_static_method === 'function') {
-          const fn = binder.bind_static_method(`[${asmName}] Exports:${name}`);
-          if (fn) { E[name] = fn; return fn; }
+          const candidates = [];
+          // Basic form
+          candidates.push(`[${asmName}] Exports:${name}`);
+          // With explicit parameter signature for known methods
+          const sigMap = {
+            'Solver_Analyze': '(System.String,System.String)',
+            'ALD_TryMutate': '(System.String)',
+            'Level_ApplyEdit': '(System.String,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32)',
+            'Level_SetTile': '(System.String,System.Int32,System.Int32,System.Int32)',
+            'Level_SpawnEntity': '(System.String,System.Int32,System.Int32,System.Int32)',
+            'Level_RemoveEntityAt': '(System.String,System.Int32,System.Int32)',
+            'Level_SetEntityOrientation': '(System.String,System.Int32,System.Int32)',
+            'Level_SetPlayer': '(System.String,System.Int32,System.Int32)',
+          };
+          if (sigMap[name]) candidates.push(`[${asmName}] Exports:${name}${sigMap[name]}`);
+          try { for (const t of Object.keys(ex || {})) { candidates.push(`[${asmName}] ${t}:${name}`); } } catch {}
+          for (const sig of candidates) {
+            try { console.debug && console.debug('[wasm-adapter] late-bind try', sig); } catch {}
+            try {
+              const fn = binder.bind_static_method(sig);
+              if (fn) { E[name] = fn; return fn; }
+            } catch {}
+          }
         }
       } catch {}
       return undefined;
@@ -176,20 +197,41 @@ export async function initWasm(baseUrl) {
       if (!fn) throw new Error('Level_Resize not available');
       return JSON.parse(fn(sid, !!add, dir));
     },
-    resize: (sid, add, dir) => JSON.parse(E.Level_Resize(sid, !!add, dir)),
 
     // Introspection
     stateTraitsAt: (sid, x, y) => E.State_TraitsAt(sid, x, y),
     rotateEntityAt: (sid, x, y, rot) => JSON.parse(E.Level_ApplyEdit(sid, 4, x, y, -1, rot)),
 
     // Optional features (Unity-Editor-only in this repo)
-    solverAnalyze: (level, cfg) => {
-      if (!has('Solver_Analyze')) throw new Error('Solver_Analyze not available in this build');
-      return JSON.parse(E.Solver_Analyze(toJsonString(level), cfg ? JSON.stringify(cfg) : null));
+    solverAnalyze: async (level, cfg) => {
+      let fn = has('Solver_Analyze') ? E.Solver_Analyze : await ensureBound('Solver_Analyze');
+      if (!fn) throw new Error('Solver_Analyze not available in this build');
+      return JSON.parse(fn(toJsonString(level), cfg ? JSON.stringify(cfg) : null));
     },
-    aldTryMutate: (level) => {
-      if (!has('ALD_TryMutate')) throw new Error('ALD_TryMutate not available in this build');
-      return JSON.parse(E.ALD_TryMutate(toJsonString(level)));
+    aldTryMutate: async (level) => {
+      let fn = has('ALD_TryMutate') ? E.ALD_TryMutate : await ensureBound('ALD_TryMutate');
+      if (!fn) throw new Error('ALD_TryMutate not available in this build');
+      return JSON.parse(fn(toJsonString(level)));
+    },
+
+    // Debug helpers (not for production): surface what exports we can see/bind
+    __debugExports: async () => {
+      const keysE = Object.keys(E || {});
+      const sol = has('Solver_Analyze');
+      let bound = false;
+      if (!sol) bound = !!(await ensureBound('Solver_Analyze'));
+      // also probe debug helpers if present
+      let pingOk = false;
+      let solAvail = false;
+      try {
+        let ping = has('Debug_Ping') ? E.Debug_Ping : await ensureBound('Debug_Ping');
+        if (ping) pingOk = !!ping();
+      } catch {}
+      try {
+        let av = has('Solver_ExportsPresent') ? E.Solver_ExportsPresent : await ensureBound('Solver_ExportsPresent');
+        if (av) solAvail = !!av();
+      } catch {}
+      return { asm: asmName, hasSolver: sol, boundAfter: bound, pingOk, solverExportsPresent: solAvail, exportKeys: keysE };
     },
     };
     __wasmSingleton = api;

@@ -6,6 +6,14 @@ export function setupHUD({
   onRunSolver, onStopSolver,
   onPlaySolution, onExportSolution
 }) {
+  try { console.debug && console.debug('[HUD] setup start'); } catch {}
+  const have = (id) => !!document.getElementById(id);
+  try { console.debug && console.debug('[HUD] elements', {
+    buildModeBtn: have('build-mode-btn'), undoBtn: have('undo-btn'), resetBtn: have('reset-btn'),
+    toggleSolver: have('toggleSolver'), refresh: have('refresh-server'), load: have('load-server'),
+    runSolver: have('runSolver'), stopSolver: have('stopSolver'),
+    solverProgress: have('solverProgress'), solutionsList: have('solutionsList')
+  }); } catch {}
   document.getElementById('build-mode-btn').addEventListener('click', onToggleBuildMode);
   document.getElementById('undo-btn').addEventListener('click', onUndo);
   document.getElementById('reset-btn').addEventListener('click', onReset);
@@ -28,8 +36,10 @@ export function setupHUD({
 
   const statusEl = document.getElementById('solverProgress');
   const solutionsEl = document.getElementById('solutionsList');
+  let lastReport = null;
 
   document.getElementById('runSolver').addEventListener('click', async () => {
+    try { console.debug && console.debug('[HUD] Run Solver clicked'); } catch {}
     const maxDepth = Number(document.getElementById('solverMaxDepth').value);
     const maxNodes = Number(document.getElementById('solverMaxNodes').value);
     const maxSolutions = Number(document.getElementById('solverMaxSolutions').value);
@@ -38,19 +48,23 @@ export function setupHUD({
     const stopBtn = document.getElementById('stopSolver');
     runBtn.disabled = true;
     stopBtn.disabled = false;
+    if (statusEl) statusEl.textContent = 'Running...';
+    if (solutionsEl) solutionsEl.innerHTML = '';
 
     try {
       await onRunSolver({
         maxDepth,
         maxNodes,
         maxSolutions,
-        onProgress: (text) => { statusEl.textContent = text; },
+        onProgress: (text) => { if (statusEl) statusEl.textContent = text; },
         onSolutions: (result = {}) => {
+          try { console.debug && console.debug('[HUD] onSolutions', result); } catch {}
           const solutions = Array.isArray(result.solutions) ? result.solutions : [];
           const deadEnds = Array.isArray(result.deadEnds) ? result.deadEnds : [];
           const stats = result.stats || {};
+          lastReport = result.reportRaw || null;
 
-          solutionsEl.innerHTML = '';
+          if (solutionsEl) solutionsEl.innerHTML = '';
 
           if (solutions.length) {
             solutions.forEach((entry, idx) => {
@@ -71,12 +85,22 @@ export function setupHUD({
               actions.appendChild(playBtn);
 
               const exportBtn = document.createElement('button');
-              exportBtn.textContent = 'Export';
-              exportBtn.addEventListener('click', () => onExportSolution && onExportSolution(entry.moves));
+              exportBtn.textContent = 'Export Report';
+              exportBtn.title = 'Export full solver JSON report';
+              exportBtn.addEventListener('click', () => {
+                if (!lastReport) return;
+                try {
+                  const blob = new Blob([JSON.stringify(lastReport, null, 2)], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url; a.download = 'solver-report.json'; a.click();
+                  URL.revokeObjectURL(url);
+                } catch {}
+              });
               actions.appendChild(exportBtn);
 
               row.appendChild(actions);
-              solutionsEl.appendChild(row);
+              if (solutionsEl) solutionsEl.appendChild(row);
             });
           }
 
@@ -87,7 +111,7 @@ export function setupHUD({
             text.className = 'solutionText';
             text.textContent = 'No solutions found (within current limits).';
             empty.appendChild(text);
-            solutionsEl.appendChild(empty);
+            if (solutionsEl) solutionsEl.appendChild(empty);
           }
 
           if (deadEnds.length) {
@@ -97,7 +121,7 @@ export function setupHUD({
             title.className = 'solutionText';
             title.innerHTML = `Dead ends (filtered): <b>${deadEnds.length}</b>`;
             header.appendChild(title);
-            solutionsEl.appendChild(header);
+            if (solutionsEl) solutionsEl.appendChild(header);
 
             deadEnds.forEach((entry, idx) => {
               const row = document.createElement('div');
@@ -106,17 +130,18 @@ export function setupHUD({
               text.className = 'solutionText';
               text.innerHTML = `#${idx + 1} len:${entry.length} moves: <b>${entry.moves}</b>`;
               row.appendChild(text);
-              solutionsEl.appendChild(row);
+              if (solutionsEl) solutionsEl.appendChild(row);
             });
           }
 
           const parts = [`Done. solutions: ${solutions.length}`, `dead ends: ${deadEnds.length}`];
           if (Number.isFinite(stats.nodesExpanded)) parts.push(`nodes: ${stats.nodesExpanded}`);
-          statusEl.textContent = parts.join(' | ');
+          if (statusEl) statusEl.textContent = parts.join(' | ');
         }
       });
     } catch (err) {
-      statusEl.textContent = `Error: ${err && err.message ? err.message : err}`;
+      try { console.error && console.error('[HUD] runSolver error', err); } catch {}
+      if (statusEl) statusEl.textContent = `Error: ${err && err.message ? err.message : err}`;
     } finally {
       runBtn.disabled = false;
       stopBtn.disabled = true;

@@ -17,6 +17,11 @@ public partial class Exports
 {
     public static void Main() { }
 
+    private static void Log(string msg)
+    {
+        try { Console.WriteLine("[Exports] " + msg); } catch { }
+    }
+
     // Sessions ---------------------------------------------------------------
 
     private static readonly Dictionary<string, Session> Sessions = new();
@@ -247,29 +252,39 @@ public partial class Exports
         return (int)TraitsUtil.ResolveEffectiveMask(s, new V2(x, y));
     }
 
-    // Optional: Solver / ALD (Editor-only in this repo) ----------------------
-
-#if EXPOSE_WASM || UNITY_EDITOR
+    // Optional: Solver / ALD -------------------------------------------------
+    // Exported unconditionally for WASM builds to ensure availability.
 #if EXPOSE_WASM
     [JSExport]
 #endif
-    // Run brute-force analyze with default caps or provided config JSON
     public static string Solver_Analyze(string levelJson, string configJson = null)
     {
         var s = Loader.FromJson(levelJson);
         var cfg = new SlimeGrid.Tools.Solver.SolverConfig();
         if (!string.IsNullOrWhiteSpace(configJson))
         {
-            try { cfg = JsonSerializer.Deserialize<SlimeGrid.Tools.Solver.SolverConfig>(configJson, J) ?? cfg; } catch { }
+            try { cfg = JsonSerializer.Deserialize<SlimeGrid.Tools.Solver.SolverConfig>(configJson, J) ?? cfg; }
+            catch (Exception ex) { Log($"Solver_Analyze: cfg parse failed: {ex.Message}"); }
         }
-        var report = SlimeGrid.Tools.Solver.BruteForceSolver.Analyze(s, cfg);
-        return Newtonsoft.Json.JsonConvert.SerializeObject(report);
+        try
+        {
+            var report = SlimeGrid.Tools.Solver.BruteForceSolver.AnalyzeBfs(s, cfg);
+            string json = Newtonsoft.Json.JsonConvert.SerializeObject(report);
+            return json;
+        }
+        catch (Exception ex)
+        {
+            Log($"Solver_Analyze: FAILED: {ex.GetType().Name}: {ex.Message}");
+            // Return a stub report instead of throwing so JS can surface feedback
+            var stub = new { nodesExplored = 0, topSolutions = Array.Empty<object>(), error = ex.Message };
+            return System.Text.Json.JsonSerializer.Serialize(stub, J);
+        }
     }
 
+#if SLIMEGRID_ALD
 #if EXPOSE_WASM
     [JSExport]
 #endif
-    // Apply a single ALD replace operator using default generator settings
     public static string ALD_TryMutate(string levelJson)
     {
         var dto = Newtonsoft.Json.JsonConvert.DeserializeObject<LevelDTO>(levelJson);
@@ -279,6 +294,23 @@ public partial class Exports
         bool ok = SlimeGrid.Tools.ALD.ReplaceOperator.TryApply(new System.Random(), settings, state, dto, mask, out var dtoOut);
         return Newtonsoft.Json.JsonConvert.SerializeObject(new { ok, level = dtoOut });
     }
+#else
+#if EXPOSE_WASM
+    [JSExport]
+#endif
+    public static string ALD_TryMutate(string levelJson)
+    {
+        // ALD tools not included in this build; return a stub response to keep JS happy
+        return System.Text.Json.JsonSerializer.Serialize(new { ok = false, err = "ald_unavailable" }, J);
+    }
+#endif
+
+    // Lightweight debug exports to verify binding availability from JS
+#if EXPOSE_WASM
+    [JSExport]
+    public static string Debug_Ping() { Log("Debug_Ping called"); return "pong"; }
+    [JSExport]
+    public static bool Solver_ExportsPresent() { return true; }
 #endif
 
     // DTOs -------------------------------------------------------------------
@@ -513,6 +545,7 @@ public partial class Exports
         var before = CloneState(s);
         bool ok = SlimeGrid.Logic.EditOps.Apply(s, kind, x, y, type, rot, out err);
         if (ok) session.PushUndo(before);
+        if (!ok) { try { Log($"Level_ApplyEdit FAILED(kind={kind}, x={x}, y={y}, type={type}, rot={rot}) err={err}"); } catch { } }
         return System.Text.Json.JsonSerializer.Serialize(new { ok, err }, J);
     }
 }
