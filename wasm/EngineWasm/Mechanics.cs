@@ -137,25 +137,55 @@ namespace SlimeGrid.Logic
 
             // Perform moves from front to back
             outRes.Add(new AnimationCue(CueType.PushStart, s.EntitiesById[chain[0]].Pos, 0.3f));
-            for (int i = chain.Count - 1; i >= 0; --i)
+            // Helper to perform one push step (already validated)
+            void DoPushStep()
             {
-                var id = chain[i];
-                var from = s.EntitiesById[id].Pos;
-                var to = targets[i];
+                for (int i = chain.Count - 1; i >= 0; --i)
+                {
+                    var id = chain[i];
+                    var from = s.EntitiesById[id].Pos;
+                    var to = new V2(from.x + dx, from.y + dy);
 
-                s.EntityAt.Remove(from);
-                s.EntityAt[to] = id;
-                s.EntitiesById[id].Pos = to;
+                    s.EntityAt.Remove(from);
+                    s.EntityAt[to] = id;
+                    s.EntitiesById[id].Pos = to;
 
-                outRes.Add(new MoveEntity(id, from, to, "push"));
+                    outRes.Add(new MoveEntity(id, from, to, "push"));
+                }
+
+                if (s.AttachedEntityId is int ae && chain.Contains(ae))
+                {
+                    var pf = s.PlayerPos;
+                    s.PlayerPos = new V2(pf.x + dx, pf.y + dy);
+                    outRes.Add(new MoveEntity(-1, pf, s.PlayerPos, "pushPlayer"));
+                }
             }
 
-            // Carry player if attached entity moved
-            if (s.AttachedEntityId is int ae && chain.Contains(ae))
+            // Execute first validated step
+            DoPushStep();
+
+            // Continue sliding while lead entity sits on Slipery
+            while (true)
             {
-                var pf = s.PlayerPos;
-                s.PlayerPos = new V2(pf.x + dx, pf.y + dy);
-                outRes.Add(new MoveEntity(-1, pf, s.PlayerPos, "pushPlayer"));
+                var headId = chain[0];
+                var headPos = s.EntitiesById[headId].Pos;
+                var headTile = TraitsUtil.ResolveTileMask(s, headPos);
+                if ((headTile & Traits.Slipery) == 0) break;
+
+                // Recompute targets for next slide and validate again
+                bool blocked = false;
+                for (int i = 0; i < chain.Count; i++)
+                {
+                    var from = s.EntitiesById[chain[i]].Pos;
+                    var to2 = new V2(from.x + dx, from.y + dy);
+                    if (!InB(s, to2)) { blocked = true; break; }
+                    var tmask = TraitsUtil.ResolveTileMask(s, to2);
+                    if ((tmask & Traits.StopsEntity) != 0 || (tmask & Traits.SticksEntity) != 0) { blocked = true; break; }
+                    if (s.EntityAt.ContainsKey(to2)) { blocked = true; break; }
+                }
+                if (blocked) break;
+
+                DoPushStep();
             }
 
             outRes.Add(new AnimationCue(CueType.PushEnd, s.EntitiesById[chain[0]].Pos, 0.3f));
@@ -166,67 +196,83 @@ namespace SlimeGrid.Logic
         public static bool Tumble(GameState s, int entityId, Dir d, StepResult outRes)
         {
             var (dx, dy) = d.Vec();
-            var from = s.EntitiesById[entityId].Pos;
-            var to = new V2(from.x + dx, from.y + dy);
+            var cur = s.EntitiesById[entityId].Pos;
+            bool moved = false;
 
-            if (!s.Grid.InBounds(to))
+            outRes.Add(new AnimationCue(CueType.TumbleStart, cur, 0.3f));
+
+            while (true)
             {
-                outRes.Add(new Blocked(Actor.Entity, Verb.Tumble, d, to, BlockReason.OutOfBounds));
-                outRes.Add(new AnimationCue(CueType.Bump, to, 0.4f));
-                return false;
-            }
+                var to = new V2(cur.x + dx, cur.y + dy);
 
-            // TILE FIRST
-            var tile = TraitsUtil.ResolveTileMask(s, to);
-            if ((tile & Traits.StopsTumble) != 0)
-            {
-                outRes.Add(new Blocked(Actor.Entity, Verb.Tumble, d, to, BlockReason.StopsTumble));
-                outRes.Add(new AnimationCue(CueType.Bump, to, 0.45f));
-                return false;
-            }
-            if ((tile & Traits.StopsEntity) != 0)
-            {
-                outRes.Add(new Blocked(Actor.Entity, Verb.Tumble, d, to, BlockReason.TileStopsEntity));
-                outRes.Add(new AnimationCue(CueType.Bump, to, 0.45f));
-                return false;
-            }
-
-            // Occupancy
-            if (s.EntityAt.ContainsKey(to))
-            {
-                outRes.Add(new Blocked(Actor.Entity, Verb.Tumble, d, to, BlockReason.Occupied));
-                outRes.Add(new AnimationCue(CueType.Bump, to, 0.45f));
-                return false;
-            }
-
-            outRes.Add(new AnimationCue(CueType.TumbleStart, from, 0.3f));
-
-            s.EntityAt.Remove(from);
-            s.EntityAt[to] = entityId;
-            s.EntitiesById[entityId].Pos = to;
-            outRes.Add(new MoveEntity(entityId, from, to, "tumble"));
-
-            // Carry player if attached + apply tipping side-effects
-            if (s.AttachedEntityId == entityId)
-            {
-                var pf = s.PlayerPos;
-                s.PlayerPos = new V2(pf.x + dx, pf.y + dy);
-                outRes.Add(new MoveEntity(-1, pf, s.PlayerPos, "tumblePlayer"));
-
-                // If side-attached and we tumbled FORWARD → on-top (EntryDir=null)
-                if (s.EntryDir is Dir ed)
+                if (!s.Grid.InBounds(to))
                 {
-                    if (d == ed)
-                        s.EntryDir = null; // on-top
+                    if (!moved)
+                    {
+                        outRes.Add(new Blocked(Actor.Entity, Verb.Tumble, d, to, BlockReason.OutOfBounds));
+                        outRes.Add(new AnimationCue(CueType.Bump, to, 0.4f));
+                        return false;
+                    }
+                    break;
                 }
-                else
+
+                var tile = TraitsUtil.ResolveTileMask(s, to);
+                if ((tile & Traits.StopsTumble) != 0 || (tile & Traits.StopsEntity) != 0)
                 {
-                    // If we were on-top and tumble succeeded → end side-attached in tumble direction
-                    s.EntryDir = d;
+                    if (!moved)
+                    {
+                        outRes.Add(new Blocked(Actor.Entity, Verb.Tumble, d, to, ((tile & Traits.StopsTumble) != 0) ? BlockReason.StopsTumble : BlockReason.TileStopsEntity));
+                        outRes.Add(new AnimationCue(CueType.Bump, to, 0.45f));
+                        return false;
+                    }
+                    break;
                 }
+
+                if (s.EntityAt.ContainsKey(to))
+                {
+                    if (!moved)
+                    {
+                        outRes.Add(new Blocked(Actor.Entity, Verb.Tumble, d, to, BlockReason.Occupied));
+                        outRes.Add(new AnimationCue(CueType.Bump, to, 0.45f));
+                        return false;
+                    }
+                    break;
+                }
+
+                // move one step
+                s.EntityAt.Remove(cur);
+                s.EntityAt[to] = entityId;
+                s.EntitiesById[entityId].Pos = to;
+                outRes.Add(new MoveEntity(entityId, cur, to, "tumble"));
+                moved = true;
+
+                if (s.AttachedEntityId == entityId)
+                {
+                    var pf = s.PlayerPos;
+                    s.PlayerPos = new V2(pf.x + dx, pf.y + dy);
+                    outRes.Add(new MoveEntity(-1, pf, s.PlayerPos, "tumblePlayer"));
+
+                    if (s.EntryDir is Dir ed)
+                    {
+                        // Forward OR Back tumble -> end on-top (EntryDir = null)
+                        if (d == ed || d == ed.Opposite()) s.EntryDir = null;
+                        // Side tumble: keep side-attachment as-is
+                    }
+                    else
+                    {
+                        // Was on-top: end side-attached in tumble direction
+                        s.EntryDir = d;
+                    }
+                }
+
+                cur = to;
+
+                // Continue sliding only if next tile is Slipery; otherwise stop
+                var curTile = TraitsUtil.ResolveTileMask(s, cur);
+                if ((curTile & Traits.Slipery) == 0) break;
             }
 
-            outRes.Add(new AnimationCue(CueType.TumbleEnd, to, 0.3f));
+            outRes.Add(new AnimationCue(CueType.TumbleEnd, s.EntitiesById[entityId].Pos, 0.3f));
             return true;
         }
 
@@ -243,19 +289,9 @@ namespace SlimeGrid.Logic
             while (true)
             {
                 var next = new V2(cur.x + dx, cur.y + dy);
-                if (!s.Grid.InBounds(next))
-                {
-                    if (!moved)
-                    {
-                        outRes.Add(new Blocked(Actor.Player, Verb.Fly, d, next, BlockReason.OutOfBounds));
-                        outRes.Add(new AnimationCue(CueType.Bump, from, 0.5f));
-                        return false;
-                    }
-                    break;
-                }
 
                 // 1) TILE StopsFlight? -> stop BEFORE
-                if (TraitsUtil.TileStopsFlight(s, next))
+                if (!s.Grid.InBounds(next) || TraitsUtil.TileStopsFlight(s, next))
                 {
                     if (!moved)
                     {

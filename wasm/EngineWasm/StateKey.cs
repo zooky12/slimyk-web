@@ -1,4 +1,4 @@
-#if UNITY_EDITOR
+#if UNITY_EDITOR || EXPOSE_WASM
 using System;
 using System.Collections.Generic;
 using SlimeGrid.Logic;
@@ -134,4 +134,3 @@ namespace SlimeGrid.Tools.Solver
     }
 }
 #endif
-

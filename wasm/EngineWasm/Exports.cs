@@ -98,6 +98,16 @@ public partial class Exports
         return JsonSerializer.Serialize(new { step = JsonSerializer.Deserialize<object>(stepJson), state = JsonSerializer.Deserialize<object>(stateJson) }, J);
     }
 
+#if EXPOSE_WASM
+    [JSExport]
+#endif
+    public static void Engine_CommitBaseline(string sid)
+    {
+        // Replace the session with a new one whose start+current are set from the current state
+        var cur = Sessions[sid].StateRef();
+        Sessions[sid] = new Session(cur);
+    }
+
     // Catalog / metadata -----------------------------------------------------
 
 #if EXPOSE_WASM
@@ -239,7 +249,10 @@ public partial class Exports
 
     // Optional: Solver / ALD (Editor-only in this repo) ----------------------
 
-#if UNITY_EDITOR
+#if EXPOSE_WASM || UNITY_EDITOR
+#if EXPOSE_WASM
+    [JSExport]
+#endif
     // Run brute-force analyze with default caps or provided config JSON
     public static string Solver_Analyze(string levelJson, string configJson = null)
     {
@@ -253,6 +266,9 @@ public partial class Exports
         return Newtonsoft.Json.JsonConvert.SerializeObject(report);
     }
 
+#if EXPOSE_WASM
+    [JSExport]
+#endif
     // Apply a single ALD replace operator using default generator settings
     public static string ALD_TryMutate(string levelJson)
     {

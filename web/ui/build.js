@@ -23,7 +23,7 @@ const VALID_TILES = new Set([
 ]);
 
 // Fallback orientation cycling if you don't expose NE/SE/SW/NW in api.ids.orient
-const TRI_ORIENT_CYCLE = ['NE','SE','SW','NW'];
+const TRI_ORIENT_CYCLE = ['N','E','S','W'];
 
 export function setupBuildUI(api, {
   canvasEl,
@@ -68,13 +68,14 @@ export function setupBuildUI(api, {
   }
 
   function tileId(name) {
-    const id = api.ids?.tile?.[name];
+    const id = (api.ids?.tile?.[name] ?? api.ids?.tile?.[String(name || '').toLowerCase()]);
     if (id == null) throw new Error(`Unknown tile '${name}'`);
     return id;
   }
 
   function entityId(name) {
-    const id = api.ids?.entity?.[name];
+    const key = String(name || '');
+    const id = (api.ids?.entity?.[key] ?? api.ids?.entity?.[key.toLowerCase?.() || key.toLowerCase()]);
     if (id == null) throw new Error(`Unknown entity '${name}'`);
     return id;
   }
@@ -92,7 +93,7 @@ export function setupBuildUI(api, {
 
   function triAt(x, y) {
     const d = dto();
-    return (d.entities || []).find(e => e.x === x && e.y === y && nameForEntityType(e.type) === 'TriBox');
+    return (d.entities || []).find(e => e.x === x && e.y === y && nameForEntityType(e.type) === 'BoxTriangle');
   }
 
   function nameForEntityType(typeId) {
@@ -124,7 +125,7 @@ export function setupBuildUI(api, {
     btn.addEventListener('click', () => {
       if (!isBuildMode()) return;
       const t = btn.dataset.tile;
-      if (!VALID_TILES.has(t)) return;
+      if (!t) return;
       rotateMode = false;
       currentEntityKey = null;
       currentPaintTile = t;
@@ -169,12 +170,11 @@ export function setupBuildUI(api, {
         // rotate Tri if present: remove & re-place with next orient
         const tri = triAt(gp.x, gp.y);
         if (tri) {
-          const currentName = TRI_ORIENT_CYCLE.find(n => orientId(n) === (tri.rot ?? -999));
-          const curIdx = currentName ? TRI_ORIENT_CYCLE.indexOf(currentName) : -1;
-          const nextName = TRI_ORIENT_CYCLE[(Math.max(0, curIdx) + 1) % TRI_ORIENT_CYCLE.length];
+          const curIdx = (tri.rot ?? 0) & 3;
+          const nextName = TRI_ORIENT_CYCLE[(curIdx + 1) % TRI_ORIENT_CYCLE.length];
           onSnapshot();
           await removeAt(gp.x, gp.y);
-          await placeEntity(gp.x, gp.y, 'TriBox', nextName);
+          await placeEntity(gp.x, gp.y, 'BoxTriangle', nextName);
           markModified();
         }
         return;
@@ -191,8 +191,7 @@ export function setupBuildUI(api, {
           return;
         }
 
-        const engineName = UI_TO_ENTITY_NAME[currentEntityKey];
-        if (!engineName) return;
+        let engineName = currentEntityKey; if (UI_TO_ENTITY_NAME[engineName]) engineName = UI_TO_ENTITY_NAME[engineName];
 
         // toggle: if same-type entity present -> remove; else place
         const e = entityAt(gp.x, gp.y);
@@ -208,7 +207,6 @@ export function setupBuildUI(api, {
       }
 
       // Tile paint
-      if (!VALID_TILES.has(currentPaintTile)) return;
       onSnapshot();
       await setTile(gp.x, gp.y, currentPaintTile, 'N');
       markModified();
@@ -303,10 +301,102 @@ export function setupBuildUI(api, {
   const addToggle = document.getElementById('resize-add');
   const removeToggle = document.getElementById('resize-remove');
   const pad = document.getElementById('dir-pad');
-  const disableResizeUI = () => {
-    if (addToggle) { addToggle.disabled = true; addToggle.title = 'Resize requires a Resize EditOp in the engine'; }
-    if (removeToggle) { removeToggle.disabled = true; removeToggle.title = 'Resize requires a Resize EditOp in the engine'; }
-    if (pad) { pad.classList.add('hidden'); pad.setAttribute('aria-hidden','true'); }
-  };
-  disableResizeUI();
+  let resizeAdd = true;
+  if (addToggle) addToggle.addEventListener('click', () => {
+    resizeAdd = true;
+    addToggle.setAttribute('aria-pressed','true'); addToggle.classList.add('active');
+    if (removeToggle) { removeToggle.setAttribute('aria-pressed','false'); removeToggle.classList.remove('active'); }
+    if (pad) { pad.classList.remove('hidden'); pad.setAttribute('aria-hidden','false'); }
+  });
+  if (removeToggle) removeToggle.addEventListener('click', () => {
+    resizeAdd = false;
+    removeToggle.setAttribute('aria-pressed','true'); removeToggle.classList.add('active');
+    if (addToggle) { addToggle.setAttribute('aria-pressed','false'); addToggle.classList.remove('active'); }
+    if (pad) { pad.classList.remove('hidden'); pad.setAttribute('aria-hidden','false'); }
+  });
+  async function doResize(dirStr){
+    if (!isBuildMode()) return;
+    const map = { up:0, right:1, down:2, left:3 };
+    const dir = map[dirStr]; if (dir == null) return;
+    try {
+      onSnapshot();
+      const res = await api.resize(resizeAdd, dir);
+      if (!res || res.ok !== true) throw new Error(res?.err || 'resize_failed');
+      markModified();
+    } catch (e) { alert('Resize failed: ' + (e?.message || e)); }
+  }
+  const upBtn = document.getElementById('dir-up');
+  const downBtn = document.getElementById('dir-down');
+  const leftBtn = document.getElementById('dir-left');
+  const rightBtn = document.getElementById('dir-right');
+  if (upBtn) upBtn.addEventListener('click', ()=>doResize('up'));
+  if (downBtn) downBtn.addEventListener('click', ()=>doResize('down'));
+  if (leftBtn) leftBtn.addEventListener('click', ()=>doResize('left'));
+  if (rightBtn) rightBtn.addEventListener('click', ()=>doResize('right'));
 }
+
+// Dynamically populate build chips from catalogs
+export function populateBuildChips(api) {
+  try {
+    const tilesBox = document.getElementById('tilesChips') || document.querySelector('#buildTiles .tile-filter-options');
+    const entsBox  = document.getElementById('entsChips')  || document.querySelector('#buildEntities .tile-filter-options');
+    if (tilesBox) tilesBox.innerHTML = '';
+    if (entsBox) entsBox.innerHTML = '';
+
+    const nice = (name) => String(name || '').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g,' ').replace(/^./, c=>c.toUpperCase());
+
+    // Tiles: create a chip for every catalog tile
+    const tiles = (typeof api.getTiles === 'function') ? api.getTiles() : [];
+    if (tilesBox && Array.isArray(tiles)) {
+      for (const t of tiles) {
+        if (!t || typeof t.name !== 'string') continue;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'tile-chip';
+        btn.dataset.tile = t.name; // build.js expects engine name
+        btn.setAttribute('aria-pressed', 'false');
+        btn.textContent = nice(t.name);
+        tilesBox.appendChild(btn);
+      }
+    }
+
+    // Entities: create chip for each catalog entity using engine names directly
+    if (entsBox) {
+      const ents = (typeof api.getEntities === 'function') ? api.getEntities() : [];
+      for (const e of ents) {
+        if (!e || typeof e.name !== 'string') continue;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'tile-chip';
+        btn.dataset.entity = e.name; // engine name
+        btn.setAttribute('aria-pressed', 'false');
+        btn.textContent = nice(e.name).replace('Box Basic','Box');
+        entsBox.appendChild(btn);
+      }
+      // Rotate tri button
+      const rot = document.createElement('button');
+      rot.type = 'button';
+      rot.className = 'tile-chip';
+      rot.dataset.rotate = 'BoxTriangle';
+      rot.setAttribute('aria-pressed', 'false');
+      rot.title = 'Rotate Tri Box';
+      rot.textContent = 'Rotate';
+      entsBox.appendChild(rot);
+
+      // Player chip
+      const player = document.createElement('button');
+      player.type = 'button';
+      player.className = 'tile-chip';
+      player.dataset.entity = 'player';
+      player.setAttribute('aria-pressed', 'false');
+      player.textContent = 'Player';
+      entsBox.appendChild(player);
+    }
+  } catch (err) {
+    console.warn('populateBuildChips failed', err);
+  }
+}
+
+
+
+

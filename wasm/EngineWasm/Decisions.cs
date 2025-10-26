@@ -56,10 +56,10 @@ namespace SlimeGrid.Logic
             }
 
             // SIDE-ATTACHED:
-            // Back → Fly
-            if (moveDir == ed.Opposite()) return Verb.Fly;
+            // Forward → Fly (fix: fly shouldn't be opposite)
+            if (moveDir == ed) return Verb.Fly;
 
-            // Forward or Side → attempt Tumble; but if target StopsTumble, PushChain instead
+            // Back or Side → attempt Tumble; but if target StopsTumble, PushChain instead
             var t = TraitsUtil.ResolveTileMask(s, next);
             if ((t & Traits.StopsTumble) != 0) return Verb.PushChain;
 

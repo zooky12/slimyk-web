@@ -113,6 +113,7 @@ export async function initWasm(baseUrl) {
             Level_RemoveEntityAt: tryMethod('Level_RemoveEntityAt'),
             Level_SetEntityOrientation: tryMethod('Level_SetEntityOrientation'),
             Level_SetPlayer: tryMethod('Level_SetPlayer'),
+            Level_Resize: tryMethod('Level_Resize'),
             State_TraitsAt: tryMethod('State_TraitsAt'),
             Level_ApplyEdit: tryMethod('Level_ApplyEdit')
           };
@@ -128,6 +129,23 @@ export async function initWasm(baseUrl) {
       throw new Error('WASM exports not found (Engine_Init). Available export types: ' + all.join(', '));
     }
     const has = (name) => E && typeof E[name] === 'function';
+    const asmName = (cfg?.mainAssemblyName || 'EngineWasm').replace(/\.dll$/i, '');
+    async function ensureBound(name) {
+      if (has(name)) return E[name];
+      // try late-bind via runtime binder without replacing other members
+      try {
+        let runtime = null;
+        if (typeof globalThis.getDotnetRuntime === 'function') {
+          runtime = await globalThis.getDotnetRuntime(0);
+        }
+        const binder = runtime && (runtime.BINDING || runtime.binding || (runtime.mono_bind_static_method && { bind_static_method: runtime.mono_bind_static_method }));
+        if (binder && typeof binder.bind_static_method === 'function') {
+          const fn = binder.bind_static_method(`[${asmName}] Exports:${name}`);
+          if (fn) { E[name] = fn; return fn; }
+        }
+      } catch {}
+      return undefined;
+    }
 
     const api = {
     // Engine lifecycle
@@ -140,6 +158,7 @@ export async function initWasm(baseUrl) {
     stepAndState: (sid, dir) => JSON.parse(E.Engine_StepAndState(sid, dir)),
     undo:      (sid)   => E.Engine_Undo(sid),
     reset:     (sid)   => E.Engine_Reset(sid),
+    commitBaseline: (sid) => E.Engine_CommitBaseline(sid),
 
     // Catalog
     getTiles:      () => JSON.parse(E.Catalog_GetTiles()),
@@ -152,6 +171,12 @@ export async function initWasm(baseUrl) {
     setEntityOrientation: (sid, entityId, rot) => JSON.parse(E.Level_SetEntityOrientation(sid, entityId, rot)),
     setPlayer: (sid, x, y) => JSON.parse(E.Level_SetPlayer(sid, x, y)),
     applyEdit: (sid, kind, x, y, type, rot) => JSON.parse(E.Level_ApplyEdit(sid, kind, x, y, type, rot)),
+    resize: async (sid, add, dir) => {
+      const fn = has('Level_Resize') ? E.Level_Resize : await ensureBound('Level_Resize');
+      if (!fn) throw new Error('Level_Resize not available');
+      return JSON.parse(fn(sid, !!add, dir));
+    },
+    resize: (sid, add, dir) => JSON.parse(E.Level_Resize(sid, !!add, dir)),
 
     // Introspection
     stateTraitsAt: (sid, x, y) => E.State_TraitsAt(sid, x, y),

@@ -48,6 +48,16 @@ namespace SlimeGrid.Logic
 
         static bool DoFlyFromAttachment(GameState s, Dir moveDir, StepResult outRes)
         {
+            // Early precheck: if immediate next tile stops flight, do not detach and do not attempt fly
+            var vec = moveDir.Vec();
+            var next = new V2(s.PlayerPos.x + vec.dx, s.PlayerPos.y + vec.dy);
+            if (!s.Grid.InBounds(next) || TraitsUtil.TileStopsFlight(s, next))
+            {
+                // Remain attached; signal a gentle bump (no FlyStart)
+                outRes.Deltas.Add(new AnimationCue(CueType.Bump, next, 0.55f));
+                return false;
+            }
+
             if (s.AttachedEntityId != null)
             {
                 s.AttachedEntityId = null;

@@ -1,4 +1,4 @@
-#if UNITY_EDITOR
+#if UNITY_EDITOR || EXPOSE_WASM
 using System.Collections.Generic;
 using Newtonsoft.Json;
 
@@ -52,4 +52,3 @@ namespace SlimeGrid.Tools.Solver
     }
 }
 #endif
-

@@ -13,6 +13,7 @@ const colors = {
   player: '#4c3ce7',
   box: '#f39c12',
   heavyBox: '#b76b1e',
+  tippingBox: '#8b5a2b',
   triBox: '#00a7a7',
   fragile: '#86796d',
   spikes: '#c0392b',
@@ -25,11 +26,20 @@ const colors = {
 
 // Optional catalog mapping (id -> name) so we can map colors by name
 let tileIdToName = null;
+let entityIdToName = null;
 export function setCatalog(tiles = []) {
   tileIdToName = new Map();
   for (const t of tiles || []) {
     if (t && Number.isInteger(t.id) && typeof t.name === 'string') {
       tileIdToName.set(t.id|0, String(t.name));
+    }
+  }
+}
+export function setEntityCatalog(ents = []) {
+  entityIdToName = new Map();
+  for (const e of ents || []) {
+    if (e && Number.isInteger(e.id) && typeof e.name === 'string') {
+      entityIdToName.set(e.id|0, String(e.name));
     }
   }
 }
@@ -68,25 +78,23 @@ export function draw(dto) {
   }
 
   // --- Entities (except player) ---
-  // mapping: keep in sync with Exports / dtoToLevel in index.html
-  const ET = { BoxBasic:1, BoxHeavy:2, TriBox:3, FragileWall:4 };
-
   for (const e of dto.entities || []) {
     if (e == null) continue;
-    const ex = e.x * tileSize + 4;
-    const ey = (h - 1 - e.y) * tileSize + 4;
-    const s  = tileSize - 8;
-
-    if (e.type === ET.TriBox) {
-      drawTri(ex - 4, ey - 4, tileSize, e.rot ?? 0, colors.triBox);
-    } else if (e.type === ET.FragileWall) {
-      // draw like a square with crack overlay (to distinguish from base wall tile)
-      ctx.fillStyle = colors.fragile;
-      ctx.fillRect(ex, ey, s, s);
-      drawFragileOverlay(e.x, e.y);
+    const name = entityIdToName && entityIdToName.get(e.type);
+    const px = e.x * tileSize;
+    const py = (h - 1 - e.y) * tileSize;
+    if (name === 'BoxTriangle' || name === 'TriBox') {
+      drawTri(px, py, tileSize, e.rot ?? 0, colors.triBox);
+    } else if (name === 'BoxTipping') {
+      drawBox(px, py, tileSize, colors.tippingBox);
+      drawTippingOverlay(px, py, tileSize);
+    } else if (name === 'BoxUnattachable') {
+      drawBox(px, py, tileSize, '#9aa0b0'); // lighter wall-like color
+    } else if (name === 'BoxBasic' || !name) {
+      drawBox(px, py, tileSize, colors.box);
     } else {
-      ctx.fillStyle = (e.type === ET.BoxHeavy) ? colors.heavyBox : colors.box;
-      ctx.fillRect(ex, ey, s, s);
+      // unknown entity: default box
+      drawBox(px, py, tileSize, colors.box);
     }
   }
 
@@ -189,10 +197,13 @@ function drawTri(px, py, size, rot, color) {
   const xL = px + inset, xR = px + size - inset;
   const yT = py + inset, yB = py + size - inset;
 
+  // Adjust orientation (fix 180° flip): add 2 modulo 4
+  const r = ((rot|0) + 2) % 4;
+
   ctx.fillStyle = color || colors.triBox;
   ctx.beginPath();
   // rot: 0..3 = NE, SE, SW, NW (pick a convention)
-  switch ((rot|0) % 4) {
+  switch (r) {
     case 0: // NE
       ctx.moveTo(xR, yT); ctx.lineTo(xL, yT); ctx.lineTo(xR, yB);
       break;
@@ -212,6 +223,25 @@ function drawTri(px, py, size, rot, color) {
   // outline
   ctx.strokeStyle = 'rgba(0,0,0,0.35)';
   ctx.lineWidth = Math.max(1, Math.floor(size * 0.05));
+  ctx.stroke();
+}
+
+function drawBox(px, py, size, color) {
+  const inset = 4;
+  ctx.fillStyle = color || colors.box;
+  ctx.fillRect(px + inset, py + inset, size - inset*2, size - inset*2);
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.strokeRect(px + inset, py + inset, size - inset*2, size - inset*2);
+}
+
+function drawTippingOverlay(px, py, size) {
+  // simple diagonal stripe to suggest tipping behavior
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = Math.max(2, Math.floor(size * 0.06));
+  const inset = 8;
+  ctx.beginPath();
+  ctx.moveTo(px + inset, py + size - inset);
+  ctx.lineTo(px + size - inset, py + inset);
   ctx.stroke();
 }
 
@@ -303,6 +333,20 @@ function drawTile(nameRaw, x, y) {
   if (n === 'hole')  return drawTileByFill(x, y, colors.hole);
   if (n === 'exit')  return drawTileByFill(x, y, colors.exit);
   if (n === 'iceexit') return drawTileByFill(x, y, colors.cyan);
+
+  // Breakable wall tile (wall base + darker diagonal)
+  if (n.includes('fragile') || n.includes('break')) {
+    drawTileByFill(x, y, colors.wall);
+    // darker diagonal overlay
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = Math.max(2, Math.floor(tileSize * 0.06));
+    const px = x * tileSize, py = y * tileSize, inset = 6;
+    ctx.beginPath();
+    ctx.moveTo(px + inset, py + tileSize - inset);
+    ctx.lineTo(px + tileSize - inset, py + inset);
+    ctx.stroke();
+    return;
+  }
 
   // Spikes
   if (n === 'spike') return drawSpikes(x, y, colors.floor, colors.wall);
