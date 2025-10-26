@@ -1,8 +1,15 @@
 // Assets/Tools/wasm-adapter.js
 // Lightweight adapter to load .NET WASM and expose typed JS wrappers.
 
+let __wasmSingleton = null;
+let __wasmBooting = null;
+
 export async function initWasm(baseUrl) {
-  const baseResolved = new URL(
+  if (__wasmSingleton) return __wasmSingleton;
+  if (__wasmBooting) return __wasmBooting;
+
+  __wasmBooting = (async () => {
+    const baseResolved = new URL(
     baseUrl ? (typeof baseUrl === 'string' ? baseUrl : baseUrl.href) : '../wasm/',
     import.meta.url
   ).href;
@@ -16,11 +23,42 @@ export async function initWasm(baseUrl) {
     dotnetMod = await import(/* @vite-ignore */ (fw + 'dotnet.js'));
   }
 
-  const { getAssemblyExports, getConfig } = await dotnetMod.dotnet
-    .withModuleConfig({ locateFile: (p) => new URL(p, fw).href })
-    .create();
-  const cfg = getConfig();
-  const ex = await getAssemblyExports(cfg.mainAssemblyName);
+    const { getAssemblyExports, getConfig } = await dotnetMod.dotnet
+      .withModuleConfig({ locateFile: (p) => new URL(p, fw).href })
+      .create();
+    const cfg = getConfig();
+
+    // Try to obtain exports from plausible assemblies
+    const tried = new Set();
+    const typeNames = new Set();
+    function addTypes(obj){ for (const k of Object.keys(obj||{})) typeNames.add(k); }
+    async function tryExports(name){
+      if (!name || tried.has(name)) return null;
+      tried.add(name);
+      try {
+        const ex = await getAssemblyExports(name);
+        addTypes(ex||{});
+        return ex;
+      } catch {
+        return null;
+      }
+    }
+
+    const cands = [];
+    const main = cfg?.mainAssemblyName;
+    if (main) cands.push(main);
+    if (main && main.endsWith('.dll')) cands.push(main.slice(0, -4));
+    cands.push('EngineWasm');
+
+    let ex = {};
+    for (const nm of cands) {
+      const candidate = await tryExports(nm);
+      if (candidate && Object.keys(candidate).length) { ex = candidate; break; }
+    }
+    // If still empty, try once more with all candidates to gather names for error messages
+    if (!ex || !Object.keys(ex).length) {
+      for (const nm of cands) await tryExports(nm);
+    }
 
   const toJsonString = (value) => {
     if (value == null) throw new Error('Expected non-null JSON value');
@@ -32,10 +70,66 @@ export async function initWasm(baseUrl) {
     return JSON.stringify(value);
   };
 
-  const E = ex.Exports;
-  const has = (name) => E && typeof E[name] === 'function';
+    // Resolve exported type that contains Engine_* methods; if not available, fall back to binding static methods
+    let E = ex && ex.Exports;
+    if (!E || typeof E.Engine_Init !== 'function') {
+      for (const k of Object.keys(ex || {})) {
+        const t = ex[k];
+        if (t && typeof t.Engine_Init === 'function') { E = t; break; }
+      }
+    }
 
-  return {
+    if (!E || typeof E.Engine_Init !== 'function') {
+      // Fallback: use runtime binder to bind static methods by signature
+      let runtime = null;
+      try {
+        if (typeof globalThis.getDotnetRuntime === 'function') {
+          runtime = await globalThis.getDotnetRuntime(0);
+        }
+      } catch {}
+      const binder = runtime && (runtime.BINDING || runtime.binding || runtime.mono_bind_static_method && { bind_static_method: runtime.mono_bind_static_method });
+      if (binder && typeof binder.bind_static_method === 'function') {
+        const asm = (cfg?.mainAssemblyName || 'EngineWasm').replace(/\.dll$/i, '');
+        const bind = (sig) => binder.bind_static_method(sig);
+        try {
+          const tryMethod = (name) => {
+            try { return bind(`[${asm}] Exports:${name}`); } catch { return null; }
+          };
+          const Engine_Init = tryMethod('Engine_Init');
+          if (!Engine_Init) throw new Error('bind Engine_Init failed');
+          E = {
+            Engine_Init,
+            Engine_GetState: tryMethod('Engine_GetState'),
+            Engine_SetState: tryMethod('Engine_SetState'),
+            Engine_Step: tryMethod('Engine_Step'),
+            Engine_Undo: tryMethod('Engine_Undo'),
+            Engine_Reset: tryMethod('Engine_Reset'),
+            Engine_StepAndState: tryMethod('Engine_StepAndState'),
+            Catalog_GetTiles: tryMethod('Catalog_GetTiles'),
+            Catalog_GetEntities: tryMethod('Catalog_GetEntities'),
+            Catalog_GetBehaviors: tryMethod('Catalog_GetBehaviors'),
+            Level_SetTile: tryMethod('Level_SetTile'),
+            Level_SpawnEntity: tryMethod('Level_SpawnEntity'),
+            Level_RemoveEntityAt: tryMethod('Level_RemoveEntityAt'),
+            Level_SetEntityOrientation: tryMethod('Level_SetEntityOrientation'),
+            Level_SetPlayer: tryMethod('Level_SetPlayer'),
+            State_TraitsAt: tryMethod('State_TraitsAt'),
+            Level_ApplyEdit: tryMethod('Level_ApplyEdit')
+          };
+        } catch {}
+      }
+    }
+
+    if (!E || typeof E.Engine_Init !== 'function') {
+      const keys = Object.keys(ex || {});
+      const all = Array.from(typeNames);
+      // eslint-disable-next-line no-console
+      console.error('[wasm-adapter] Unable to locate Engine_Init export', { mainAssemblyName: cfg?.mainAssemblyName, tried: Array.from(tried), availableTypes: all });
+      throw new Error('WASM exports not found (Engine_Init). Available export types: ' + all.join(', '));
+    }
+    const has = (name) => E && typeof E[name] === 'function';
+
+    const api = {
     // Engine lifecycle
     initLevel: (level) => E.Engine_Init(toJsonString(level)),
     getState:  (sid)   => JSON.parse(E.Engine_GetState(sid)),
@@ -72,5 +166,15 @@ export async function initWasm(baseUrl) {
       if (!has('ALD_TryMutate')) throw new Error('ALD_TryMutate not available in this build');
       return JSON.parse(E.ALD_TryMutate(toJsonString(level)));
     },
-  };
+    };
+    __wasmSingleton = api;
+    return api;
+  })();
+
+  try {
+    const api = await __wasmBooting;
+    return api;
+  } finally {
+    __wasmBooting = null;
+  }
 }

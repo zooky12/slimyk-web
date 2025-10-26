@@ -67,6 +67,7 @@ public partial class Exports
         var before = CloneState(s.StateRef());
         var res = Engine.Step(s.StateRef(), (Dir)dir);
         bool changed = !ShallowEqual(before, s.StateRef());
+        if (changed) s.PushUndo(before);
         var dto = new StepExDto
         {
             moved = changed,
@@ -146,17 +147,19 @@ public partial class Exports
 #endif
     public static string Level_SetTile(string sid, int x, int y, int tileTypeId)
     {
-        var s = Sessions[sid].StateRef();
+        var session = Sessions[sid];
+        var s = session.StateRef();
         var p = new V2(x, y);
         if (!s.Grid.InBounds(p)) return JsonSerializer.Serialize(new { ok = false, err = "out_of_bounds" }, J);
 
+        var before = CloneState(s);
         var tt = (TileType)tileTypeId;
         var cell = s.Grid.CellRef(p);
         cell.Type = tt;
         ApplyRecipeToCell(ref cell, TileTraits.For(tt));
         cell.Toggled = false;
         s.Grid.CellRef(p) = cell;
-
+        session.PushUndo(before);
         return JsonSerializer.Serialize(new { ok = true }, J);
     }
 
@@ -165,11 +168,14 @@ public partial class Exports
 #endif
     public static string Level_SpawnEntity(string sid, int typeId, int x, int y)
     {
-        var s = Sessions[sid].StateRef();
+        var session = Sessions[sid];
+        var s = session.StateRef();
         var p = new V2(x, y);
         if (!s.Grid.InBounds(p)) return JsonSerializer.Serialize(new { ok = false, err = "out_of_bounds" }, J);
         if (s.EntityAt.ContainsKey(p)) return JsonSerializer.Serialize(new { ok = false, err = "occupied" }, J);
+        var before = CloneState(s);
         var e = EntityCatalog.Spawn(s, (EntityType)typeId, p);
+        session.PushUndo(before);
         return JsonSerializer.Serialize(new { ok = true, id = e.Id }, J);
     }
 
@@ -178,12 +184,15 @@ public partial class Exports
 #endif
     public static string Level_RemoveEntityAt(string sid, int x, int y)
     {
-        var s = Sessions[sid].StateRef();
+        var session = Sessions[sid];
+        var s = session.StateRef();
         var p = new V2(x, y);
         if (!s.EntityAt.TryGetValue(p, out var id)) return JsonSerializer.Serialize(new { ok = false, err = "none" }, J);
+        var before = CloneState(s);
         s.EntityAt.Remove(p);
         s.EntitiesById.Remove(id);
         if (s.AttachedEntityId == id) { s.AttachedEntityId = null; s.EntryDir = null; }
+        session.PushUndo(before);
         return JsonSerializer.Serialize(new { ok = true, id }, J);
     }
 
@@ -192,9 +201,12 @@ public partial class Exports
 #endif
     public static string Level_SetEntityOrientation(string sid, int entityId, int orientation)
     {
-        var s = Sessions[sid].StateRef();
+        var session = Sessions[sid];
+        var s = session.StateRef();
         if (!s.EntitiesById.TryGetValue(entityId, out var e)) return JsonSerializer.Serialize(new { ok = false, err = "no_entity" }, J);
+        var before = CloneState(s);
         e.Orientation = (Orientation)orientation;
+        session.PushUndo(before);
         return JsonSerializer.Serialize(new { ok = true }, J);
     }
 
@@ -203,11 +215,14 @@ public partial class Exports
 #endif
     public static string Level_SetPlayer(string sid, int x, int y)
     {
-        var s = Sessions[sid].StateRef();
+        var session = Sessions[sid];
+        var s = session.StateRef();
         var p = new V2(x, y);
         if (!s.Grid.InBounds(p)) return JsonSerializer.Serialize(new { ok = false, err = "out_of_bounds" }, J);
+        var before = CloneState(s);
         s.PlayerPos = p;
         s.AttachedEntityId = null; s.EntryDir = null;
+        session.PushUndo(before);
         return JsonSerializer.Serialize(new { ok = true }, J);
     }
 
@@ -356,6 +371,11 @@ public partial class Exports
                 entities = ents
             };
         }
+
+        public void PushUndo(GameState prev)
+        {
+            _undo.Push(prev);
+        }
     }
 
     // Helpers ----------------------------------------------------------------
@@ -471,9 +491,12 @@ public partial class Exports
 #endif
     public static string Level_ApplyEdit(string sid, int kind, int x, int y, int type, int rot)
     {
-        var s = Sessions[sid].StateRef();
+        var session = Sessions[sid];
+        var s = session.StateRef();
         string err;
+        var before = CloneState(s);
         bool ok = SlimeGrid.Logic.EditOps.Apply(s, kind, x, y, type, rot, out err);
+        if (ok) session.PushUndo(before);
         return System.Text.Json.JsonSerializer.Serialize(new { ok, err }, J);
     }
 }

@@ -10,7 +10,7 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <PublishTrimmed>false</PublishTrimmed>
-    <DefineConstants>$(DefineConstants);BROWSER</DefineConstants>
+    <DefineConstants>$(DefineConstants);BROWSER;EXPOSE_WASM</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

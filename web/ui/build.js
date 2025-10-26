@@ -1,57 +1,8 @@
-// ui/build.js — wired to minimal EditOps via wasm adapter
-// Needs ../core/wasm-adapter.js to export:
-//   api.getState(): DrawDto
-//   api.edit(kind, x, y, type, rot): Promise<void>
-//   api.ids = { tile:{...}, entity:{...}, orient:{...} }
-
-// ui/build.js
-import { initWasm } from '../core/wasm-adapter.js';
-
-const DEMO = {
-  "tileGrid": [
-    ["wall","wall","wall","wall","wall","wall","wall","wall","wall","wall","wall"],
-    ["wall","hole","hole","hole","hole","hole","hole","hole","hole","hole","wall"],
-    ["wall","hole","floor","floor","floor","floor","floor","floor","floor","hole","wall"],
-    ["wall","hole","floor","hole","wall","exit","wall","hole","floor","hole","wall"],
-    ["wall","hole","floor","hole","floor","floor","floor","hole","floor","hole","wall"],
-    ["wall","hole","floor","hole","floor","hole","floor","hole","floor","hole","wall"],
-    ["wall","hole","floor","hole","floor","hole","floor","hole","floor","hole","wall"],
-    ["wall","hole","floor","hole","floor","hole","floor","hole","floor","hole","wall"],
-    ["wall","wall","floor","hole","floor","floor","floor","hole","floor","hole","wall"],
-    ["wall","hole","hole","hole","hole","hole","hole","hole","hole","hole","wall"],
-    ["spike","wall","wall","wall","wall","wall","wall","wall","wall","wall","wall"]
-  ],
-  "entities": [
-    { "type": "PlayerSpawn", "x": 5, "y": 8 },
-    { "type": "BoxBasic",    "x": 8, "y": 8 },
-    { "type": "BoxBasic",    "x": 5, "y": 4 },
-    { "type": "BoxBasic",    "x": 2, "y": 4 }
-  ]
-};
-
-
-const api = await initWasm('./wasm/');          // resolves to ../wasm/ relative to module
-let sid = api.initLevel(DEMO); // can be object; adapter stringifies
-
-let apiPromise = null;
-async function getApi() {
-  if (window.__WASM_API__) return window.__WASM_API__;     // reuse if index created it
-  if (!apiPromise) apiPromise = initWasm('/wasm/');         // or init here
-  const api = await apiPromise;
-  window.__WASM_API__ ??= api;                              // stash for other modules
-  return api;
-}
-async function getSid() {
-  if (window.__WASM_SID__) return window.__WASM_SID__;
-  const api = await getApi();
-  // create a session if none: use your demo JSON or current editor JSON
-  const demoJson = window.__DEMO_LEVEL_JSON__ || JSON.stringify(/* your fallback */);
-  const sid = await api.initLevel(demoJson);
-  window.__WASM_SID__ = sid;
-  return sid;
-}
-const res = await api.applyEdit(sid, kind, x, y, type, rot);
-
+// ui/build.js — editor tools using wasm-adapter API
+// Expects a session-bound `api` object exposing:
+//   - getState(): DrawDto
+//   - applyEdit(kind, x, y, type, rot): Promise<{ok,err?}>
+//   - ids = { tile:{...}, entity:{...}, orient:{...} }
 
 // C# enum: EditKind { SetTile=0, PlaceEntity=1, Remove=2, MovePlayer=3 }
 const EDIT = { SetTile: 0, PlaceEntity: 1, Remove: 2, MovePlayer: 3 };
@@ -74,9 +25,9 @@ const VALID_TILES = new Set([
 // Fallback orientation cycling if you don't expose NE/SE/SW/NW in api.ids.orient
 const TRI_ORIENT_CYCLE = ['NE','SE','SW','NW'];
 
-export function setupBuildUI({
+export function setupBuildUI(api, {
   canvasEl,
-  getState,        // kept for compatibility but we pull state from API
+  getState,        // kept for compatibility but we pull state from API by default
   setState,        // kept for compatibility; not used to mutate
   onModified = () => {},
   onSnapshot = () => {},
@@ -90,7 +41,7 @@ export function setupBuildUI({
   const painted = new Set();
 
   // ---------- helpers ----------
-  function dto() { return api.getState(); }
+  function dto() { return (typeof getState === 'function' ? getState() : api.getState()); }
 
   function gridPosFromMouse(ev) {
     const d = dto();
@@ -102,7 +53,9 @@ export function setupBuildUI({
     const ypx = (ev.clientY - rect.top)  * scaleY;
     const tile = Math.floor(canvasEl.width / Math.max(1, d.w));
     const x = Math.floor(xpx / tile);
-    const y = Math.floor(ypx / tile);
+    const yDraw = Math.floor(ypx / tile);
+    // Flip Y to engine coordinates (engine y=0 bottom)
+    const y = (d.h - 1 - yDraw);
     if (x < 0 || x >= d.w || y < 0 || y >= d.h) return null;
     return { x, y };
   }
@@ -150,19 +103,19 @@ export function setupBuildUI({
   }
 
   async function setTile(x, y, name, rotName = 'N') {
-    await api.edit(EDIT.SetTile, x, y, tileId(name), orientId(rotName));
+    await api.applyEdit(EDIT.SetTile, x, y, tileId(name), orientId(rotName));
   }
 
   async function placeEntity(x, y, entityName, rotName = 'N') {
-    await api.edit(EDIT.PlaceEntity, x, y, entityId(entityName), orientId(rotName));
+    await api.applyEdit(EDIT.PlaceEntity, x, y, entityId(entityName), orientId(rotName));
   }
 
   async function removeAt(x, y) {
-    await api.edit(EDIT.Remove, x, y, 0, 0);
+    await api.applyEdit(EDIT.Remove, x, y, 0, 0);
   }
 
   async function movePlayerTo(x, y) {
-    await api.edit(EDIT.MovePlayer, x, y, 0, 0);
+    await api.applyEdit(EDIT.MovePlayer, x, y, 0, 0);
   }
 
   // ---------- UI bindings ----------
@@ -246,7 +199,7 @@ export function setupBuildUI({
         if (e && nameForEntityType(e.type) === engineName) {
           onSnapshot(); await removeAt(gp.x, gp.y); markModified();
         } else if (e) {
-          // Some other entity is here → also treat as toggle remove
+          // Some other entity is here — also treat as toggle remove
           onSnapshot(); await removeAt(gp.x, gp.y); markModified();
         } else {
           onSnapshot(); await placeEntity(gp.x, gp.y, engineName, 'N'); markModified();

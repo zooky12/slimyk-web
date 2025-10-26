@@ -92,46 +92,34 @@ export function draw(dto) {
 
   // --- Player ---
   if (dto.player && Number.isInteger(dto.player.x) && Number.isInteger(dto.player.y)) {
-    const cellX = dto.player.x * tileSize;
-    const cellY = (h - 1 - dto.player.y) * tileSize;
-    const cx = cellX + tileSize / 2;
-    const cy = cellY + tileSize / 2;
+    const px = dto.player.x * tileSize + tileSize / 2;
+    const py = (h - 1 - dto.player.y) * tileSize + tileSize / 2;
 
+    // If attached, hint the entryDir with a half-disk / wedge
     if (dto.player.attached && typeof dto.player.entryDir === 'number' && dto.player.entryDir >= 0) {
-      // Triangle wedge: base on a cell edge, apex at center (aligns with entryDir)
-      const d = (dto.player.entryDir | 0); // 0=N,1=E,2=S,3=W -> rotate -90
-      const m = Math.max(1, Math.floor(tileSize * 0.10));
-      const left = cellX + m, right = cellX + tileSize - m;
-      const top = cellY + m, bottom = cellY + tileSize - m;
-      const apexX = cx, apexY = cy;
-      let bx1, by1, bx2, by2; // base endpoints
-      if (d === 0) { // top edge
-        bx1 = left; by1 = top; bx2 = right; by2 = top;
-      } else if (d === 1) { // right edge
-        bx1 = right; by1 = top; bx2 = right; by2 = bottom;
-      } else if (d === 2) { // bottom edge
-        bx1 = left; by1 = bottom; bx2 = right; by2 = bottom;
-      } else { // left edge
-        bx1 = left; by1 = top; bx2 = left; by2 = bottom;
-      }
-      ctx.fillStyle = colors.player;
+      const r = tileSize * 0.32;
+      const a = dirToAngle(dto.player.entryDir);
+      // Draw wedge opposite entry (you "came from" that direction)
       ctx.beginPath();
-      ctx.moveTo(apexX, apexY);
-      ctx.lineTo(bx1, by1);
-      ctx.lineTo(bx2, by2);
+      ctx.moveTo(px, py);
+      ctx.fillStyle = colors.player;
+      // 180° wedge
+      ctx.arc(px, py, r, a + Math.PI * 0.15, a + Math.PI * 0.85, false);
       ctx.closePath();
       ctx.fill();
+      // thin outline
       ctx.strokeStyle = 'rgba(0,0,0,0.35)';
       ctx.stroke();
     } else {
       // free mode: circle
       ctx.fillStyle = colors.player;
       ctx.beginPath();
-      ctx.arc(cx, cy, tileSize * 0.32, 0, Math.PI * 2);
+      ctx.arc(px, py, tileSize * 0.32, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 }
+
 // No-op animate so existing imports work (we’re not animating WASM effects here)
 export function animate(_effects) { /* intentionally empty; all motion comes from engine steps */ }
 
@@ -330,5 +318,4 @@ function drawTile(nameRaw, x, y) {
   if (n.includes('wall') && !n.includes('fragile')) return drawTileByFill(x, y, colors.wall);
   return drawTileByFill(x, y, colors.floor);
 }
-
 
