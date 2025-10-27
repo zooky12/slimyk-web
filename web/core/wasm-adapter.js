@@ -147,6 +147,17 @@ export async function initWasm(baseUrl) {
           const sigMap = {
             'Solver_Analyze': '(System.String,System.String)',
             'ALD_TryMutate': '(System.String)',
+            'ALD_PlaceOne': '(System.String,System.String)',
+            'ALD_RemoveOne': '(System.String,System.String)',
+            'ALD_SelectBase': '(System.String,System.Int32,System.Double)',
+            'ALD_SolutionSimilarityMoves': '(System.String,System.String)',
+            'ALD_LayoutSimilarity': '(System.String,System.String)',
+            'ALD_NewContext': '(System.String)',
+            'ALD_CloseContext': '(System.String)',
+            'ALD_InsertCandidate': '(System.String,System.String,System.String)',
+            'ALD_GetBucketsSummary': '(System.String)',
+            'ALD_SelectBaseCtx': '(System.String,System.Int32,System.Double)',
+            'ALD_Mutate': '(System.String,System.String,System.String)',
             'Level_ApplyEdit': '(System.String,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32)',
             'Level_SetTile': '(System.String,System.Int32,System.Int32,System.Int32)',
             'Level_SpawnEntity': '(System.String,System.Int32,System.Int32,System.Int32)',
@@ -212,6 +223,62 @@ export async function initWasm(baseUrl) {
       let fn = has('ALD_TryMutate') ? E.ALD_TryMutate : await ensureBound('ALD_TryMutate');
       if (!fn) throw new Error('ALD_TryMutate not available in this build');
       return JSON.parse(fn(toJsonString(level)));
+    },
+    // Context manager APIs
+    aldNewContext: async (settings) => {
+      let fn = has('ALD_NewContext') ? E.ALD_NewContext : await ensureBound('ALD_NewContext');
+      if (!fn) throw new Error('ALD_NewContext not available');
+      return JSON.parse(fn(toJsonString(settings)));
+    },
+    aldCloseContext: async (ctxId) => {
+      let fn = has('ALD_CloseContext') ? E.ALD_CloseContext : await ensureBound('ALD_CloseContext');
+      if (!fn) throw new Error('ALD_CloseContext not available');
+      return JSON.parse(fn(String(ctxId||'')));
+    },
+    aldInsertCandidate: async (ctxId, level, solverCfg) => {
+      let fn = has('ALD_InsertCandidate') ? E.ALD_InsertCandidate : await ensureBound('ALD_InsertCandidate');
+      if (!fn) throw new Error('ALD_InsertCandidate not available');
+      return JSON.parse(fn(String(ctxId||''), toJsonString(level), solverCfg ? JSON.stringify(solverCfg) : null));
+    },
+    aldGetBucketsSummary: async (ctxId) => {
+      let fn = has('ALD_GetBucketsSummary') ? E.ALD_GetBucketsSummary : await ensureBound('ALD_GetBucketsSummary');
+      if (!fn) throw new Error('ALD_GetBucketsSummary not available');
+      return JSON.parse(fn(String(ctxId||'')));
+    },
+    aldSelectBaseCtx: async (ctxId, topK, skew) => {
+      let fn = has('ALD_SelectBaseCtx') ? E.ALD_SelectBaseCtx : await ensureBound('ALD_SelectBaseCtx');
+      if (!fn) throw new Error('ALD_SelectBaseCtx not available');
+      return JSON.parse(fn(String(ctxId||''), (topK|0), Number(skew)));
+    },
+    aldMutate: async (ctxId, level, mutate) => {
+      let fn = has('ALD_Mutate') ? E.ALD_Mutate : await ensureBound('ALD_Mutate');
+      if (!fn) throw new Error('ALD_Mutate not available');
+      return JSON.parse(fn(String(ctxId||''), toJsonString(level), mutate ? JSON.stringify(mutate) : null));
+    },
+    aldSelectBase: async (entries, topK, skew) => {
+      let fn = has('ALD_SelectBase') ? E.ALD_SelectBase : await ensureBound('ALD_SelectBase');
+      if (!fn) throw new Error('ALD_SelectBase not available in this build');
+      return JSON.parse(fn(toJsonString(entries), (topK|0), Number(skew)));
+    },
+    aldSolutionSimilarityMoves: async (movesA, movesB) => {
+      let fn = has('ALD_SolutionSimilarityMoves') ? E.ALD_SolutionSimilarityMoves : await ensureBound('ALD_SolutionSimilarityMoves');
+      if (!fn) throw new Error('ALD_SolutionSimilarityMoves not available in this build');
+      return Number(fn(String(movesA||''), String(movesB||'')));
+    },
+    aldLayoutSimilarity: async (levelA, levelB) => {
+      let fn = has('ALD_LayoutSimilarity') ? E.ALD_LayoutSimilarity : await ensureBound('ALD_LayoutSimilarity');
+      if (!fn) throw new Error('ALD_LayoutSimilarity not available in this build');
+      return Number(fn(toJsonString(levelA), toJsonString(levelB)));
+    },
+    aldPlaceOne: async (level, opts) => {
+      let fn = has('ALD_PlaceOne') ? E.ALD_PlaceOne : await ensureBound('ALD_PlaceOne');
+      if (!fn) throw new Error('ALD_PlaceOne not available in this build');
+      return JSON.parse(fn(toJsonString(level), opts ? JSON.stringify(opts) : null));
+    },
+    aldRemoveOne: async (level, opts) => {
+      let fn = has('ALD_RemoveOne') ? E.ALD_RemoveOne : await ensureBound('ALD_RemoveOne');
+      if (!fn) throw new Error('ALD_RemoveOne not available in this build');
+      return JSON.parse(fn(toJsonString(level), opts ? JSON.stringify(opts) : null));
     },
 
     // Debug helpers (not for production): surface what exports we can see/bind

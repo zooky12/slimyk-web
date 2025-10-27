@@ -1,6 +1,7 @@
 ﻿// ui/hud.js
 export function setupHUD({
   onToggleBuildMode, onUndo, onReset,
+  onNextLevel,
   onToggleSolver, onRefreshLevels, onLoadLevel,
   onExport, onImport,
   onRunSolver, onStopSolver,
@@ -17,6 +18,8 @@ export function setupHUD({
   document.getElementById('build-mode-btn').addEventListener('click', onToggleBuildMode);
   document.getElementById('undo-btn').addEventListener('click', onUndo);
   document.getElementById('reset-btn').addEventListener('click', onReset);
+  const nextBtn = document.getElementById('next-level');
+  if (nextBtn && typeof onNextLevel === 'function') nextBtn.addEventListener('click', onNextLevel);
 
   document.getElementById('toggleSolver').addEventListener('click', onToggleSolver);
   document.getElementById('refresh-server').addEventListener('click', onRefreshLevels);

@@ -1,4 +1,3 @@
-#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
 using SlimeGrid.Logic;
@@ -46,6 +45,14 @@ namespace SlimeGrid.Tools.ALD
         public List<BucketConfig> buckets = new();
     }
 
+    // Derived feature from a formula; future‑proof heuristic composition
+    [Serializable]
+    public sealed class DerivedFeatureConfig
+    {
+        public string id;
+        public string expr; // references other features by id (e.g., "(a+b)/(c+d)")
+    }
+
     // Candidate with metadata
     public sealed class LevelCandidate
     {
@@ -57,5 +64,3 @@ namespace SlimeGrid.Tools.ALD
         public float normalizedScore;
     }
 }
-#endif
-

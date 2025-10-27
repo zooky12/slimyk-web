@@ -34,7 +34,7 @@ export function setupBuildUI(api, {
   requestRedraw = () => {},
   isBuildMode
 }) {
-  let currentPaintTile = 'wall';
+  let currentPaintTile = null;
   let currentEntityKey = null;   // 'box' | 'heavyBox' | 'triBox' | 'player' | 'fragileWall'
   let rotateMode = false;        // rotate tri on click
   let mouseDown = false;
@@ -101,6 +101,40 @@ export function setupBuildUI(api, {
     const ent = api.ids?.entity || {};
     for (const [name, id] of Object.entries(ent)) if (id === typeId) return name;
     return null;
+  }
+
+  // Catalog helpers for converting DrawDto -> LevelDTO (names)
+  function catalogs() {
+    const tiles = (typeof api.getTiles === 'function') ? api.getTiles() : [];
+    const ents  = (typeof api.getEntities === 'function') ? api.getEntities() : [];
+    const tileIdToName = Object.create(null);
+    const entIdToName = Object.create(null);
+    for (const t of tiles || []) if (t) tileIdToName[t.id] = t.name;
+    for (const e of ents || []) if (e) entIdToName[e.id] = e.name;
+    return { tileIdToName, entIdToName };
+  }
+  function toLevelDTOFromDraw(draw) {
+    const { tileIdToName, entIdToName } = catalogs();
+    const w = draw.w | 0, h = draw.h | 0;
+    const tileGrid = Array.from({ length: h }, (_, y) => new Array(w));
+    for (let y=0; y<h; y++) for (let x=0; x<w; x++) {
+      const id = draw.tiles[y * w + x];
+      tileGrid[y][x] = tileIdToName[id] || 'Floor';
+    }
+    const entities = [];
+    if (draw.player && Number.isInteger(draw.player.x) && Number.isInteger(draw.player.y))
+      entities.push({ type:'PlayerSpawn', x: draw.player.x, y: draw.player.y });
+    for (const e of draw.entities || []) {
+      const name = entIdToName[e.type];
+      if (!name || name === 'PlayerSpawn') continue;
+      const out = { type: name, x: e.x|0, y: e.y|0 };
+      if (Number.isInteger(e.rot)) {
+        const rotNames = ['N','E','S','W'];
+        out.orientation = rotNames[(e.rot|0) & 3];
+      }
+      entities.push(out);
+    }
+    return { width: w, height: h, tileGrid, entities };
   }
 
   async function setTile(x, y, name, rotName = 'N') {
@@ -206,7 +240,8 @@ export function setupBuildUI(api, {
         return;
       }
 
-      // Tile paint
+      // Tile paint only if a tile is explicitly selected
+      if (!currentPaintTile) return;
       onSnapshot();
       await setTile(gp.x, gp.y, currentPaintTile, 'N');
       markModified();
@@ -295,8 +330,8 @@ export function setupBuildUI(api, {
   // Resize / Compact — not available with current EditOps; disable with hints
   const compactBtn = document.getElementById('compact-grid');
   if (compactBtn) {
-    compactBtn.title = 'Compact borders needs a Compact or Resize EditOp (not available yet)';
-    compactBtn.addEventListener('click', () => alert('Compact requires a Compact/Resize EditOp in the engine. We can add it next.'));
+    compactBtn.title = 'Try to remove empty borders without changing solutions';
+    compactBtn.addEventListener('click', compactBorders);
   }
   const addToggle = document.getElementById('resize-add');
   const removeToggle = document.getElementById('resize-remove');
@@ -333,6 +368,164 @@ export function setupBuildUI(api, {
   if (downBtn) downBtn.addEventListener('click', ()=>doResize('down'));
   if (leftBtn) leftBtn.addEventListener('click', ()=>doResize('left'));
   if (rightBtn) rightBtn.addEventListener('click', ()=>doResize('right'));
+
+  // Add 4: add one row/column on all 4 sides
+  async function addFour() {
+    onSnapshot();
+    for (const d of [0,1,2,3]) {
+      const res = await api.resize(true, d);
+      if (!res || res.ok !== true) throw new Error(res?.err || 'add4_failed');
+    }
+    markModified();
+  }
+  const addFourBtn = document.getElementById('add-four');
+  if (addFourBtn) addFourBtn.addEventListener('click', async () => {
+    if (!isBuildMode()) return;
+    addFourBtn.disabled = true;
+    try { await addFour(); }
+    catch (e) { console.warn('Add 4 failed', e); alert('Add 4 failed.'); }
+    finally { addFourBtn.disabled = false; }
+  });
+
+  // ----- Solver helpers for Compact/Simplify -----
+  function makeSolver() {
+    try {
+      const worker = new Worker(new URL('../workers/ald-worker.js', import.meta.url), { type:'module' });
+      let nextId = 1; const pending = new Map();
+      worker.onmessage = (ev) => {
+        const { id, ok, result, error } = ev.data || {};
+        const pr = pending.get(id); if (!pr) return; pending.delete(id);
+        if (ok) pr.resolve(result); else pr.reject(new Error(error || 'worker_error'));
+      };
+      const call = (cmd, ...args) => new Promise((resolve, reject) => { const id = nextId++; pending.set(id, { resolve, reject }); worker.postMessage({ id, cmd, args }); });
+      call('init', { baseUrl: '../wasm/' }).catch(()=>{});
+      return { analyze: (level, cfg) => call('solverAnalyze', level, cfg), dispose: () => worker.terminate() };
+    } catch {
+      return { analyze: (level, cfg) => api.solverAnalyze ? api.solverAnalyze(level, cfg) : Promise.reject(new Error('no_solver')), dispose: () => {} };
+    }
+  }
+  function unpackMovesPacked(bytes, length) {
+    const dirToChar = ['w','d','s','a'];
+    if (!bytes || length <= 0) return '';
+    let arr;
+    if (typeof bytes === 'string') { try { const bin = atob(bytes); arr = new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i); } catch { arr = []; } }
+    else if (Array.isArray(bytes)) arr = bytes; else if (bytes && typeof bytes.length === 'number') arr = Array.from(bytes); else arr = [];
+    const out=[]; for (let i=0;i<length;i++){ const b=i>>2, sh=(i&3)*2; const mv=((arr[b]||0)>>sh)&3; out.push(dirToChar[mv]||''); } return out.join('');
+  }
+  function takeTop3(report){ const top = Array.isArray(report?.topSolutions) ? report.topSolutions.slice(0,3) : []; return top.map(s => (typeof s.moves==='string')? s.moves : unpackMovesPacked(s.movesPacked, s.length|0)); }
+  function filteredCount(report){ const v = report?.solutionsFilteredCount; if (Number.isFinite(v)) return v|0; if (Array.isArray(report?.solutions)) return report.solutions.length|0; const t = Array.isArray(report?.topSolutions)? report.topSolutions.length:0; return t|0; }
+  function makeSignature(report){ return { cnt: filteredCount(report), top3: takeTop3(report) }; }
+  function sameSignature(a,b){ if (!a||!b) return false; if (a.cnt !== b.cnt) return false; const n=Math.max(a.top3.length,b.top3.length); for (let i=0;i<n;i++){ if ((a.top3[i]||'') !== (b.top3[i]||'')) return false; } return true; }
+  function readSolverCaps(){ const depth = Number(document.getElementById('solverMaxDepth')?.value) || 100; const nodes = Number(document.getElementById('solverMaxNodes')?.value) || 200000; return { depthCap: depth, nodesCap: nodes, timeCapSeconds: 5.0, enforceTimeCap: false }; }
+  async function analyzeCurrent(solver){ const draw = dto(); const level = toLevelDTOFromDraw(draw); return await solver.analyze(level, readSolverCaps()); }
+
+  async function compactBorders(){
+    if (!isBuildMode()) return;
+    if (compactBtn) compactBtn.disabled = true;
+    const solver = makeSolver();
+    try {
+      let baseSig = makeSignature(await analyzeCurrent(solver));
+      for (const dir of [0,1,2,3]){
+        while (true){
+          const snap = toLevelDTOFromDraw(dto());
+          let removed=false; try { const res = await api.resize(false, dir); removed = !!(res && res.ok); } catch { removed=false; }
+          if (!removed) { await api.setState(snap); break; }
+          const sig = makeSignature(await analyzeCurrent(solver));
+          if (sameSignature(baseSig, sig)) { baseSig = sig; continue; }
+          await api.setState(snap); break;
+        }
+      }
+      // After compaction succeeds across all sides, automatically run Add 4
+      try { await addFour(); } catch { /* ignore, already compacted */ }
+      markModified();
+    } finally { solver.dispose(); if (compactBtn) compactBtn.disabled = false; }
+  }
+
+  async function simplifyLevel(){
+    if (!isBuildMode()) return;
+    const a=document.getElementById('simplify-keep'); const b=document.getElementById('simplify-flex'); if (a) a.disabled=true; if (b) b.disabled=true;
+    const solver = makeSolver();
+    try {
+      await compactBorders();
+      let baseSig = makeSignature(await analyzeCurrent(solver));
+      const d = dto(); if (!d) return;
+      const wallId = api.ids?.tile?.wall;
+      const passable = (x,y)=> (d.tiles[y*d.w+x]??0) !== wallId;
+      const seen = Array.from({length:d.h},()=>Array(d.w).fill(false)); const q=[]; const px=d.player?.x, py=d.player?.y; if (Number.isInteger(px)&&Number.isInteger(py)&&passable(px,py)){ seen[py][px]=true; q.push({x:px,y:py}); }
+      const ord=[]; const dirs2=[[1,0],[-1,0],[0,1],[0,-1]]; while(q.length){ const {x,y}=q.shift(); ord.push({x,y}); for(const [dx,dy] of dirs2){ const nx=x+dx, ny=y+dy; if(nx<0||nx>=d.w||ny<0||ny>=d.h) continue; if(seen[ny][nx]) continue; if(!passable(nx,ny)) continue; seen[ny][nx]=true; q.push({x:nx,y:ny}); } }
+      const tilesArr = (typeof api.getTiles==='function')? api.getTiles():[]; const idToName={}; for(const t of tilesArr) idToName[t.id]=t.name;
+      const simpler = (name)=>{ const nc=String(name||'').toLowerCase(); const out=[]; if(nc!=='floor'&&nc!=='wall'&&nc!=='hole') out.push('Floor'); if(nc!=='wall'&&nc!=='hole'){ if(nc.includes('hole')||nc.includes('grill')) out.push('Hole'); out.push('Wall'); } return out; };
+      for (const {x,y} of ord){ const id=d.tiles[y*d.w+x]; const name=idToName[id]||''; const lc=name.toLowerCase(); if (lc==='floor'||lc==='wall'||lc==='hole') continue; const cands=simpler(name); for(const cand of cands){ const snap=toLevelDTOFromDraw(dto()); try{ await setTile(x,y,cand,'N'); } catch { await api.setState(snap); continue; } const sig=makeSignature(await analyzeCurrent(solver)); if (sameSignature(baseSig, sig)){ baseSig=sig; d.tiles[y*d.w+x]=(api.ids?.tile?.[cand] ?? api.ids?.tile?.[cand.toLowerCase?.()||cand.toLowerCase()])|0; break; } else { await api.setState(snap); } } }
+      await compactBorders(); markModified();
+    } catch(e){ console.warn('Simplify failed', e); alert('Simplify failed: '+(e?.message||e)); }
+    finally { solver.dispose(); if (a) a.disabled=false; if (b) b.disabled=false; }
+  }
+
+  // Hook simplify buttons
+  const simpA = document.getElementById('simplify-keep'); const simpB = document.getElementById('simplify-flex');
+  if (simpA) simpA.addEventListener('click', simplifyLevel);
+  if (simpB) simpB.addEventListener('click', simplifyLevel);
+  // Greedy helpers: Place 1 / Remove 1 using C# exports
+  const placeOneBtn = document.getElementById('place-one');
+  if (placeOneBtn) placeOneBtn.addEventListener('click', async () => {
+    if (!isBuildMode()) return;
+    try {
+      const draw = dto(); if (!draw) return;
+      const level = toLevelDTOFromDraw(draw);
+      // Determine selection: prefer entity chip, else tile chip
+      let entitiesPlace = undefined;
+      let tilesPlace = undefined;
+      if (currentEntityKey) {
+        let engineName = currentEntityKey;
+        if (UI_TO_ENTITY_NAME[engineName]) engineName = UI_TO_ENTITY_NAME[engineName];
+        entitiesPlace = [engineName];
+      } else if (currentPaintTile) {
+        tilesPlace = [currentPaintTile.replace(/\s+/g,'')];
+      } else {
+        alert('Select a tile or entity first.');
+        return;
+      }
+      // Pull solver caps if present in UI
+      const maxDepth = Number(document.getElementById('solverMaxDepth')?.value) || 100;
+      const maxNodes = Number(document.getElementById('solverMaxNodes')?.value) || 200000;
+      const opts = { tilesPlace, entitiesPlace, movePlayer: (entitiesPlace && entitiesPlace.includes('PlayerSpawn')) || false, maxDepth, maxNodes };
+      const res = await api.aldPlaceOne(level, opts);
+      if (!res || !res.ok) throw new Error(res?.err || 'place_one_failed');
+      await api.setState(res.level);
+      requestRedraw();
+    } catch (e) {
+      console.warn('PlaceOne failed', e);
+      alert('Place One failed: ' + (e?.message || e));
+    }
+  });
+
+  const removeOneBtn = document.getElementById('remove-one');
+  if (removeOneBtn) removeOneBtn.addEventListener('click', async () => {
+    if (!isBuildMode()) return;
+    try {
+      const draw = dto(); if (!draw) return;
+      const level = toLevelDTOFromDraw(draw);
+      let entitiesRemove = undefined;
+      if (currentEntityKey) {
+        let engineName = currentEntityKey;
+        if (UI_TO_ENTITY_NAME[engineName]) engineName = UI_TO_ENTITY_NAME[engineName];
+        entitiesRemove = [engineName];
+      } else {
+        // Fallback: try to remove common box type
+        entitiesRemove = ['BoxBasic'];
+      }
+      const maxDepth = Number(document.getElementById('solverMaxDepth')?.value) || 100;
+      const maxNodes = Number(document.getElementById('solverMaxNodes')?.value) || 200000;
+      const opts = { entitiesRemove, maxDepth, maxNodes };
+      const res = await api.aldRemoveOne(level, opts);
+      if (!res || !res.ok) throw new Error(res?.err || 'remove_one_failed');
+      await api.setState(res.level);
+      requestRedraw();
+    } catch (e) {
+      console.warn('RemoveOne failed', e);
+      alert('Remove One failed: ' + (e?.message || e));
+    }
+  });
 }
 
 // Dynamically populate build chips from catalogs
@@ -396,6 +589,7 @@ export function populateBuildChips(api) {
     console.warn('populateBuildChips failed', err);
   }
 }
+
 
 
 

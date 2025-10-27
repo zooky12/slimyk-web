@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using SlimeGrid.Logic;
+using SlimeGrid.Tools.ALD;
 
 #if EXPOSE_WASM
 using System.Runtime.InteropServices.JavaScript;
@@ -304,6 +305,261 @@ public partial class Exports
         return System.Text.Json.JsonSerializer.Serialize(new { ok = false, err = "ald_unavailable" }, J);
     }
 #endif
+
+    // ---- ALD utilities for JS orchestration --------------------------------
+#if EXPOSE_WASM
+    [JSExport]
+#endif
+    public static string ALD_SelectBase(string entriesJson, int topK, double skew)
+    {
+        try
+        {
+            var list = Newtonsoft.Json.JsonConvert.DeserializeObject<List<AldEntry>>(entriesJson) ?? new List<AldEntry>();
+            if (list.Count == 0) return System.Text.Json.JsonSerializer.Serialize(new { ok = false, err = "empty" }, J);
+
+            // Take topK highest score
+            list.Sort((a, b) => (b.score ?? 0).CompareTo(a.score ?? 0));
+            var pool = new List<AldEntry>();
+            for (int i = 0; i < list.Count && i < Math.Max(1, topK); i++) pool.Add(list[i]);
+            if (pool.Count == 0) return System.Text.Json.JsonSerializer.Serialize(new { ok = false, err = "empty_pool" }, J);
+
+            double min = double.PositiveInfinity, max = double.NegativeInfinity;
+            foreach (var e in pool) { var s = e.score ?? 0; if (s < min) min = s; if (s > max) max = s; }
+            double eps = 1e-6;
+            var weights = new double[pool.Count]; double sum = 0;
+            for (int i = 0; i < pool.Count; i++)
+            {
+                double s = pool[i].score ?? 0;
+                double basew = (s - min) + eps; if (basew < eps) basew = eps;
+                double w = skew <= 0 ? 1.0 : Math.Pow(basew, skew);
+                weights[i] = w; sum += w;
+            }
+            var rng = new System.Random();
+            double r = rng.NextDouble() * (sum > 0 ? sum : 1.0);
+            for (int i = 0; i < pool.Count; i++)
+            {
+                r -= weights[i];
+                if (r <= 0)
+                {
+                    var chosen = pool[i];
+                    return Newtonsoft.Json.JsonConvert.SerializeObject(new { ok = true, level = chosen.level });
+                }
+            }
+            var last = pool[pool.Count - 1];
+            return Newtonsoft.Json.JsonConvert.SerializeObject(new { ok = true, level = last.level });
+        }
+        catch (Exception ex)
+        {
+            return System.Text.Json.JsonSerializer.Serialize(new { ok = false, err = ex.Message }, J);
+        }
+    }
+
+    // ---- ALD Context Manager ----------------------------------------------
+    static readonly Dictionary<string, SlimeGrid.Tools.ALD.AldContext> _aldCtx = new();
+
+#if EXPOSE_WASM
+    [JSExport]
+#endif
+    public static string ALD_NewContext(string settingsJson)
+    {
+        try
+        {
+            var settings = Newtonsoft.Json.JsonConvert.DeserializeObject<SlimeGrid.Tools.ALD.ContextSettings>(settingsJson) ?? new SlimeGrid.Tools.ALD.ContextSettings();
+            var ctx = new SlimeGrid.Tools.ALD.AldContext(settings);
+            var id = Guid.NewGuid().ToString("N");
+            _aldCtx[id] = ctx;
+            return System.Text.Json.JsonSerializer.Serialize(new { ok = true, ctxId = id }, J);
+        }
+        catch (Exception ex)
+        {
+            return System.Text.Json.JsonSerializer.Serialize(new { ok = false, err = ex.Message }, J);
+        }
+    }
+
+#if EXPOSE_WASM
+    [JSExport]
+#endif
+    public static string ALD_CloseContext(string ctxId)
+    {
+        if (string.IsNullOrWhiteSpace(ctxId)) return System.Text.Json.JsonSerializer.Serialize(new { ok = false, err = "no_ctx" }, J);
+        _aldCtx.Remove(ctxId);
+        return System.Text.Json.JsonSerializer.Serialize(new { ok = true }, J);
+    }
+
+#if EXPOSE_WASM
+    [JSExport]
+#endif
+    public static string ALD_InsertCandidate(string ctxId, string levelJson, string solverCfgJson = null)
+    {
+        if (!_aldCtx.TryGetValue(ctxId, out var ctx)) return System.Text.Json.JsonSerializer.Serialize(new { ok = false, err = "no_ctx" }, J);
+        try
+        {
+            var dto = Newtonsoft.Json.JsonConvert.DeserializeObject<SlimeGrid.Logic.LevelDTO>(levelJson);
+            var (ok, names, scores) = ctx.Insert(dto);
+            return Newtonsoft.Json.JsonConvert.SerializeObject(new { ok, accepted = names, scores });
+        }
+        catch (Exception ex)
+        {
+            return System.Text.Json.JsonSerializer.Serialize(new { ok = false, err = ex.Message }, J);
+        }
+    }
+
+#if EXPOSE_WASM
+    [JSExport]
+#endif
+    public static string ALD_GetBucketsSummary(string ctxId)
+    {
+        if (!_aldCtx.TryGetValue(ctxId, out var ctx)) return System.Text.Json.JsonSerializer.Serialize(new { ok = false, err = "no_ctx" }, J);
+        try
+        {
+            var buckets = new List<object>();
+            foreach (var b in ctx.Buckets)
+            {
+                // Copy and sort entries by score (descending) for UI display
+                var sorted = new List<SlimeGrid.Tools.ALD.LevelCandidate>(b.Items);
+                sorted.Sort((a, c) => c.normalizedScore.CompareTo(a.normalizedScore));
+
+                var items = new List<object>();
+                foreach (var it in sorted)
+                {
+                    items.Add(new {
+                        level = it.dto,
+                        score = it.normalizedScore,
+                        metrics = it.features
+                    });
+                }
+                buckets.Add(new { name = b.Config.name, entries = items });
+            }
+            return Newtonsoft.Json.JsonConvert.SerializeObject(new { ok = true, buckets });
+        }
+        catch (Exception ex)
+        {
+            return System.Text.Json.JsonSerializer.Serialize(new { ok = false, err = ex.Message }, J);
+        }
+    }
+
+#if EXPOSE_WASM
+    [JSExport]
+#endif
+    public static string ALD_SelectBaseCtx(string ctxId, int topK, double skew)
+    {
+        if (!_aldCtx.TryGetValue(ctxId, out var ctx)) return System.Text.Json.JsonSerializer.Serialize(new { ok = false, err = "no_ctx" }, J);
+        try
+        {
+            var lvl = ctx.SelectBase();
+            if (lvl == null) return System.Text.Json.JsonSerializer.Serialize(new { ok = false, err = "empty" }, J);
+            return Newtonsoft.Json.JsonConvert.SerializeObject(new { ok = true, level = lvl });
+        }
+        catch (Exception ex)
+        {
+            return System.Text.Json.JsonSerializer.Serialize(new { ok = false, err = ex.Message }, J);
+        }
+    }
+
+#if EXPOSE_WASM
+    [JSExport]
+#endif
+    public static string ALD_Mutate(string ctxId, string baseLevelJson, string mutateJson)
+    {
+        if (!_aldCtx.TryGetValue(ctxId, out var ctx)) return System.Text.Json.JsonSerializer.Serialize(new { ok = false, err = "no_ctx" }, J);
+        try
+        {
+            var dto = Newtonsoft.Json.JsonConvert.DeserializeObject<SlimeGrid.Logic.LevelDTO>(baseLevelJson);
+            bool evolve = false;
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(mutateJson))
+                {
+                    var jo = System.Text.Json.JsonDocument.Parse(mutateJson);
+                    if (jo.RootElement.TryGetProperty("evolve", out var ev) && ev.ValueKind == System.Text.Json.JsonValueKind.True) evolve = true;
+                }
+            } catch { }
+            var outDto = ctx.Mutate(dto, evolve);
+            return Newtonsoft.Json.JsonConvert.SerializeObject(new { ok = true, level = outDto });
+        }
+        catch (Exception ex)
+        {
+            return System.Text.Json.JsonSerializer.Serialize(new { ok = false, err = ex.Message }, J);
+        }
+    }
+#if EXPOSE_WASM
+    [JSExport]
+#endif
+    public static double ALD_SolutionSimilarityMoves(string movesA, string movesB)
+    {
+        // Simple Levenshtein over move strings
+        if (string.IsNullOrEmpty(movesA) && string.IsNullOrEmpty(movesB)) return 0.0;
+        int n = movesA?.Length ?? 0, m = movesB?.Length ?? 0;
+        var dp = new int[n + 1, m + 1];
+        for (int i = 0; i <= n; i++) dp[i, 0] = i;
+        for (int j = 0; j <= m; j++) dp[0, j] = j;
+        for (int i = 1; i <= n; i++)
+            for (int j = 1; j <= m; j++)
+            {
+                int cost = (movesA[i - 1] == movesB[j - 1]) ? 0 : 1;
+                int del = dp[i - 1, j] + 1;
+                int ins = dp[i, j - 1] + 1;
+                int sub = dp[i - 1, j - 1] + cost;
+                int v = del < ins ? del : ins; if (sub < v) v = sub; dp[i, j] = v;
+            }
+        int dist = dp[n, m]; int denom = Math.Max(n, m);
+        return denom == 0 ? 0.0 : ((double)dist / denom);
+    }
+
+#if EXPOSE_WASM
+    [JSExport]
+#endif
+    public static double ALD_LayoutSimilarity(string levelJsonA, string levelJsonB)
+    {
+        var a = Loader.FromJson(levelJsonA);
+        var b = Loader.FromJson(levelJsonB);
+        int W = a.Grid.W, H = a.Grid.H;
+        var mask = new bool[W, H];
+        for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) mask[x, y] = true;
+        return SlimeGrid.Tools.ALD.Similarity.LayoutSimilarity(a, b, mask, 8, 0.4f, 0.4f, 0.2f);
+    }
+
+    private sealed class AldEntry
+    {
+        public double? score { get; set; }
+        public LevelDTO level { get; set; }
+    }
+    // Greedy single-edit ops (always available in this build)
+#if EXPOSE_WASM
+    [JSExport]
+#endif
+    public static string ALD_PlaceOne(string levelJson, string optsJson)
+    {
+        try
+        {
+            var dto = Newtonsoft.Json.JsonConvert.DeserializeObject<LevelDTO>(levelJson);
+            var opts = System.Text.Json.JsonSerializer.Deserialize<SlimeGrid.Tools.ALD.GreedyOps.PlaceOneOptions>(optsJson ?? "{}", J) ?? new SlimeGrid.Tools.ALD.GreedyOps.PlaceOneOptions();
+            var result = SlimeGrid.Tools.ALD.GreedyOps.PlaceOne(dto, opts);
+            return Newtonsoft.Json.JsonConvert.SerializeObject(result);
+        }
+        catch (Exception ex)
+        {
+            return System.Text.Json.JsonSerializer.Serialize(new { ok = false, err = ex.Message }, J);
+        }
+    }
+
+#if EXPOSE_WASM
+    [JSExport]
+#endif
+    public static string ALD_RemoveOne(string levelJson, string optsJson)
+    {
+        try
+        {
+            var dto = Newtonsoft.Json.JsonConvert.DeserializeObject<LevelDTO>(levelJson);
+            var opts = System.Text.Json.JsonSerializer.Deserialize<SlimeGrid.Tools.ALD.GreedyOps.RemoveOneOptions>(optsJson ?? "{}", J) ?? new SlimeGrid.Tools.ALD.GreedyOps.RemoveOneOptions();
+            var result = SlimeGrid.Tools.ALD.GreedyOps.RemoveOne(dto, opts);
+            return Newtonsoft.Json.JsonConvert.SerializeObject(result);
+        }
+        catch (Exception ex)
+        {
+            return System.Text.Json.JsonSerializer.Serialize(new { ok = false, err = ex.Message }, J);
+        }
+    }
 
     // Lightweight debug exports to verify binding availability from JS
 #if EXPOSE_WASM

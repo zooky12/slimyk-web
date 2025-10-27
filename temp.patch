@@ -1,0 +1,44 @@
+*** Begin Patch
+*** Update File: wasm/EngineWasm/BruteForceSolver.cs
+@@
+             report.solutionsFilteredCount = filtered.Count;
+ 
+             for (int i = 0; i < Math.Min(10, filtered.Count); i++)
+             {
+                 var s = filtered[i];
+                 report.topSolutions.Add(new SolutionEntry { length = s.Length, movesPacked = s.Snapshot().Buffer });
+             }
++
++            // Moves analysis (top1 and top3 averages)
++            if (filtered.Count > 0)
++            {
++                ComputeMoveStats(initial, filtered, out int inBox1, out int free1, out int dlen1, out double inBox3, out double free3, out double dlen3);
++                report.stepsInBoxTop1 = inBox1;
++                report.stepsFreeTop1 = free1;
++                report.dedupMovesLenTop1 = dlen1;
++                report.stepsInBoxTop3Avg = inBox3;
++                report.stepsFreeTop3Avg = free3;
++                report.dedupMovesLenTop3Avg = dlen3;
++            }
+@@
+             report.solutionsFilteredCount = filtered.Count;
+             for (int i = 0; i < Math.Min(10, filtered.Count); i++)
+             {
+                 var s = filtered[i];
+                 report.topSolutions.Add(new SolutionEntry { length = s.Length, movesPacked = s.Snapshot().Buffer });
+             }
++
++            if (filtered.Count > 0)
++            {
++                ComputeMoveStats(initial, filtered, out int inBox1, out int free1, out int dlen1, out double inBox3, out double free3, out double dlen3);
++                report.stepsInBoxTop1 = inBox1;
++                report.stepsFreeTop1 = free1;
++                report.dedupMovesLenTop1 = dlen1;
++                report.stepsInBoxTop3Avg = inBox3;
++                report.stepsFreeTop3Avg = free3;
++                report.dedupMovesLenTop3Avg = dlen3;
++            }
+@@
+         static string ComputeLevelHash(GameState s)
+         {
+*** End Patch

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using SlimeGrid.Logic;
 
 namespace SlimeGrid.Logic
@@ -43,6 +43,9 @@ namespace SlimeGrid.Logic
             ref var cell = ref s.Grid.CellRef(p);
             bool changed = cell.Type != t || cell.Orientation != rot;
 
+            // Save old cell to allow revert on failed guards
+            var old = cell;
+
             cell.Type = t;
             cell.Orientation = rot;
 
@@ -51,12 +54,18 @@ namespace SlimeGrid.Logic
             ApplyRecipeToCell(ref cell, def);
             s.Grid.SetCell(p, cell);
 
-            // Guards: reject turning a walkable tile into a blocker under occupants
+            // Guards: reject turning a walkable tile into a blocker/hole under occupants
             var tileMask = TraitsUtil.ResolveTileMask(s, p);
-            if ((tileMask & Traits.StopsEntity) != 0 && s.EntityAt.ContainsKey(p))
-            { err = "Entity present; tile stops entities"; return false; }
-            if ((tileMask & Traits.StopsPlayer) != 0 && s.PlayerPos.Equals(p))
-            { err = "Player on tile; tile stops player"; return false; }
+            if (s.EntityAt.ContainsKey(p))
+            {
+                if ((tileMask & Traits.StopsEntity) != 0) { err = "Entity present; tile stops entities"; cell = old; s.Grid.SetCell(p, cell); return false; }
+                if ((tileMask & Traits.HoleForEntity) != 0) { err = "Entity present; tile holes entities"; cell = old; s.Grid.SetCell(p, cell); return false; }
+            }
+            if (s.PlayerPos.Equals(p))
+            {
+                if ((tileMask & Traits.StopsPlayer) != 0) { err = "Player on tile; tile stops player"; cell = old; s.Grid.SetCell(p, cell); return false; }
+                if ((tileMask & Traits.HoleForPlayer) != 0) { err = "Player on tile; tile holes player"; cell = old; s.Grid.SetCell(p, cell); return false; }
+            }
 
             return changed;
         }

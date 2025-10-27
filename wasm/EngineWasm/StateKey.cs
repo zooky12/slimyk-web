@@ -129,6 +129,83 @@ namespace SlimeGrid.Tools.Solver
 
             return new StateKey(h1, h2);
         }
+
+        // Zobrist-style hasher (order-insensitive, low allocation). Designed for speed.
+        public static StateKey ComputeZobrist(GameState s, LevelContext ctx)
+        {
+            ulong h1 = 0x9E3779B97F4A7C15UL; // different offsets for each stream
+            ulong h2 = 0xC2B2AE3D27D4EB4FUL;
+
+            static ulong Mix64(ulong x)
+            {
+                x ^= x >> 33;
+                x *= 0xff51afd7ed558ccdUL;
+                x ^= x >> 33;
+                x *= 0xc4ceb9fe1a85ec53UL;
+                x ^= x >> 33;
+                return x;
+            }
+            static void XorMix(ref ulong h, ulong v)
+            {
+                h ^= Mix64(v + 0x9E3779B97F4A7C15UL);
+            }
+
+            // Player position + attachment + entryDir (small signature)
+            unchecked
+            {
+                ulong p = ((ulong)(uint)s.PlayerPos.x << 32) ^ (ulong)(uint)s.PlayerPos.y;
+                XorMix(ref h1, p ^ 0xA5A5A5A5A5A5A5A5UL);
+                XorMix(ref h2, p ^ 0x5A5A5A5A5A5A5A5AUL);
+                int ed = s.EntryDir.HasValue ? ((int)s.EntryDir.Value + 1) : 0;
+                int att = s.AttachedEntityId.HasValue ? 1 : 0;
+                XorMix(ref h1, (ulong)((ed & 0xFF) | ((att & 0xFF) << 8)));
+                XorMix(ref h2, (ulong)((att & 0xFF) | ((ed & 0xFF) << 8)));
+            }
+
+            // Entities: order-insensitive xor over type,pos,orientation
+            foreach (var kv in s.EntitiesById)
+            {
+                var e = kv.Value;
+                ulong v = 0;
+                v ^= (ulong)(byte)e.Type;
+                v ^= (ulong)(((uint)e.Pos.x << 16) ^ (uint)e.Pos.y);
+                v ^= (ulong)(byte)e.Orientation << 24;
+                XorMix(ref h1, v);
+                XorMix(ref h2, v * 1315423911UL);
+            }
+
+            // Toggle parity signature (sparse):
+            // - Mix a single bit for AnyButtonPressed (affects all Button-toggleable tiles uniformly)
+            // - Mix only positions currently toggled by entity occupancy
+            // - Player parity is implied by PlayerPos; add an extra bit if that cell is ToggleableByPlayer
+            bool anyBtn = ComputeAnyButtonPressed(s);
+            XorMix(ref h1, anyBtn ? 0xABCDEF01UL : 0x10FEDCBAUL);
+            XorMix(ref h2, anyBtn ? 0x0123456789ABCDEFUL : 0xFEDCBA9876543210UL);
+
+            // Entity-triggered toggles at occupied positions
+            foreach (var kv in s.EntitiesById)
+            {
+                var pos = kv.Value.Pos;
+                ref var c = ref s.Grid.CellRef(pos);
+                if ((c.ActiveMask & Traits.ToggleableByEntity) != 0)
+                {
+                    ulong pv = ((ulong)(uint)pos.x << 32) ^ (ulong)(uint)pos.y;
+                    XorMix(ref h1, pv ^ 0xC001D00DUL);
+                    XorMix(ref h2, pv ^ 0x00D1C0DEUL);
+                }
+            }
+            // Player-triggered toggle at player cell (optional bit)
+            {
+                ref var pc = ref s.Grid.CellRef(s.PlayerPos);
+                if ((pc.ActiveMask & Traits.ToggleableByPlayer) != 0)
+                {
+                    XorMix(ref h1, 0xBEEFCAFEUL);
+                    XorMix(ref h2, 0xFACEB00CUL);
+                }
+            }
+
+            return new StateKey(h1, h2);
+        }
     }
 }
 #endif

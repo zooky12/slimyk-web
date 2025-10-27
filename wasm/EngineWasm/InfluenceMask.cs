@@ -1,4 +1,3 @@
-#if UNITY_EDITOR
 using System.Collections.Generic;
 using SlimeGrid.Logic;
 
@@ -72,5 +71,3 @@ namespace SlimeGrid.Tools.ALD
         }
     }
 }
-#endif
-

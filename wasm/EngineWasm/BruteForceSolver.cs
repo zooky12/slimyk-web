@@ -14,12 +14,61 @@ namespace SlimeGrid.Tools.Solver
         public int DepthCap = 10_000;
         public double TimeCapSeconds = 10.0;
         public bool EnforceTimeCap = false; // implemented, off by default
+        public bool LightReport = true;
     }
 
     public static class BruteForceSolver
     {
         // Deterministic order
         static readonly Dir[] DIRS = new[] { Dir.N, Dir.E, Dir.S, Dir.W };
+
+        static bool PrefixEqual(PackedMoves a, PackedMoves b, int len)
+        {
+
+            if (len < 0) return false;
+            if (a.Length < len || b.Length < len) return false;
+            for (int i = 0; i < len; i++) if (a.GetAt(i) != b.GetAt(i)) return false;
+            return true;
+        }
+        static void ComputeMoveStats(GameState initial, List<PackedMoves> filtered, out int stepsInBoxTop1, out int stepsFreeTop1, out int dedupLenTop1,
+            out double stepsInBoxTop3Avg, out double stepsFreeTop3Avg, out double dedupLenTop3Avg)
+        {
+            stepsInBoxTop1 = 0; stepsFreeTop1 = 0; dedupLenTop1 = 0;
+            stepsInBoxTop3Avg = 0; stepsFreeTop3Avg = 0; dedupLenTop3Avg = 0;
+            int k = Math.Min(3, filtered.Count);
+            if (k <= 0) return;
+
+            for (int i = 0; i < k; i++)
+            {
+                var pm = filtered[i];
+                // Replay moves
+                var s = CloneState(initial);
+                int inBox = 0, free = 0;
+                int dedupLen = 0;
+                int lastMove = -1;
+                for (int m = 0; m < pm.Length; m++)
+                {
+                    var code = pm.GetAt(m); // 0=N,1=E,2=S,3=W
+                    // Dedup compressed length (count direction changes)
+                    if (code != lastMove) { dedupLen++; lastMove = code; }
+                    var dir = DIRS[code];
+                    Engine.Step(s, dir);
+                    if (s.AttachedEntityId != null) inBox++; else free++;
+                }
+                if (i == 0)
+                {
+                    stepsInBoxTop1 = inBox;
+                    stepsFreeTop1 = free;
+                    dedupLenTop1 = dedupLen;
+                }
+                stepsInBoxTop3Avg += inBox;
+                stepsFreeTop3Avg += free;
+                dedupLenTop3Avg += dedupLen;
+            }
+            stepsInBoxTop3Avg /= k;
+            stepsFreeTop3Avg /= k;
+            dedupLenTop3Avg /= k;
+        }
 
         public static SolverReport Analyze(GameState initial, SolverConfig cfg)
         {
@@ -58,7 +107,7 @@ namespace SlimeGrid.Tools.Solver
             var rev = new Dictionary<StateKey, HashSet<StateKey>>(4096);
             var deadEnds = new List<PackedMoves>(1024);
 
-            var rootKey = StateHasher.Compute(initial, ctx);
+            var rootKey = StateHasher.ComputeZobrist(initial, ctx);
             visited[rootKey] = 0;
 
             int nodes = 1;
@@ -104,7 +153,7 @@ namespace SlimeGrid.Tools.Solver
                 var res = Engine.Step(child, dir);
 
                 // Compute hash to detect no-op and canonical state
-                var childKey = StateHasher.Compute(child, ctx);
+                var childKey = StateHasher.ComputeZobrist(child, ctx);
                 if (childKey.Equals(frame.Key))
                 {
                     // no-op; ignore
@@ -190,30 +239,48 @@ namespace SlimeGrid.Tools.Solver
                 report.topSolutions.Add(new SolutionEntry { length = s.Length, movesPacked = s.Snapshot().Buffer });
             }
 
-            // Dead-end metrics (depth computed locally from the dead-end state, loop-aware)
-            report.deadEndsCount = deadEnds.Count;
-            double sumDepth = 0;
-            var levelCtx = StateHasher.BuildLevelContext(initial.Grid);
-            foreach (var d in deadEnds)
-            {
-                int dd = DeadEndAnalyzer.ComputeDeadEndDepth(initial, levelCtx, d);
-                sumDepth += dd;
-            }
-            report.deadEndsAverageDepth = deadEnds.Count > 0 ? sumDepth / deadEnds.Count : 0;
-
-            // Near-optimal counts
+            // Moves analysis (top1 and top3 averages)
             if (filtered.Count > 0)
             {
-                var top1 = filtered[0];
-                int nearTop1 = 0, nearTop3 = 0;
-                var top3 = new List<PackedMoves>();
-                for (int i = 0; i < Math.Min(3, filtered.Count); i++) top3.Add(filtered[i]);
+                ComputeMoveStats(initial, filtered, out int inBox1, out int free1, out int dlen1, out double inBox3, out double free3, out double dlen3);
+                report.stepsInBoxTop1 = inBox1;
+                report.stepsFreeTop1 = free1;
+                report.dedupMovesLenTop1 = dlen1;
+                report.stepsInBoxTop3Avg = inBox3;
+                report.stepsFreeTop3Avg = free3;
+                report.dedupMovesLenTop3Avg = dlen3;
+            }
+
+            // Dead-end metrics (count and near counts); depth skipped in LightReport
+            report.deadEndsCount = deadEnds.Count;
+            if (cfg.LightReport)
+            {
+                report.deadEndsAverageDepth = 0;
+            }
+            else
+            {
+                double sumDepth = 0;
+                var levelCtx = StateHasher.BuildLevelContext(initial.Grid);
                 foreach (var d in deadEnds)
                 {
-                    if (PackedMoves.EditDistanceLeq(d, top1, 5)) nearTop1++;
-                    bool anyTop3 = false;
-                    foreach (var t in top3) { if (PackedMoves.EditDistanceLeq(d, t, 5)) { anyTop3 = true; break; } }
-                    if (anyTop3) nearTop3++;
+                    int dd = DeadEndAnalyzer.ComputeDeadEndDepth(initial, levelCtx, d);
+                    sumDepth += dd;
+                }
+                report.deadEndsAverageDepth = deadEnds.Count > 0 ? sumDepth / deadEnds.Count : 0;
+            }
+
+            // Near counts via strict prefix equality with K=5
+            if (filtered.Count > 0 && deadEnds.Count > 0)
+            {
+                int K = 5;
+                var top1 = filtered[0];
+                int nearTop1 = 0, nearTop3 = 0;
+                int top3N = Math.Min(3, filtered.Count);
+                foreach (var d in deadEnds)
+                {
+                    int L = d.Length; if (L <= K) continue; int pref = L - K;
+                    if (PrefixEqual(d, top1, pref)) nearTop1++;
+                    for (int t = 0; t < top3N; t++) { if (PrefixEqual(d, filtered[t], pref)) { nearTop3++; break; } }
                 }
                 report.deadEndsNearTop1Count = nearTop1;
                 report.deadEndsNearTop3Count = nearTop3;
@@ -257,7 +324,7 @@ namespace SlimeGrid.Tools.Solver
             var adj = new Dictionary<StateKey, HashSet<StateKey>>(4096);
             var rev = new Dictionary<StateKey, HashSet<StateKey>>(4096);
 
-            var rootKey = StateHasher.Compute(initial, ctx);
+            var rootKey = StateHasher.ComputeZobrist(initial, ctx);
             visited[rootKey] = 0;
 
             int nodes = 0;
@@ -283,7 +350,7 @@ namespace SlimeGrid.Tools.Solver
                 {
                     var child = CloneState(state);
                     var _ = Engine.Step(child, dir);
-                    var childKey = StateHasher.Compute(child, ctx);
+                    var childKey = StateHasher.ComputeZobrist(child, ctx);
                     if (childKey.Equals(key)) continue;
 
                     int newDepth = depth + 1;
@@ -335,6 +402,17 @@ namespace SlimeGrid.Tools.Solver
                 report.topSolutions.Add(new SolutionEntry { length = s.Length, movesPacked = s.Snapshot().Buffer });
             }
 
+            if (filtered.Count > 0)
+            {
+                ComputeMoveStats(initial, filtered, out int inBox1, out int free1, out int dlen1, out double inBox3, out double free3, out double dlen3);
+                report.stepsInBoxTop1 = inBox1;
+                report.stepsFreeTop1 = free1;
+                report.dedupMovesLenTop1 = dlen1;
+                report.stepsInBoxTop3Avg = inBox3;
+                report.stepsFreeTop3Avg = free3;
+                report.dedupMovesLenTop3Avg = dlen3;
+            }
+
             // Dead-end detection using reverse BFS from goals
             var solvable = new HashSet<StateKey>(goals);
             var rq = new Queue<StateKey>();
@@ -368,18 +446,40 @@ namespace SlimeGrid.Tools.Solver
             }
 
             report.deadEndsCount = deadEndKeys.Count;
-            if (deadEndKeys.Count > 0)
+            if (cfg.LightReport)
             {
-                double sumLen = 0;
-                foreach (var k in deadEndKeys)
-                {
-                    if (pathByKey.TryGetValue(k, out var pm)) sumLen += pm.Length;
-                }
-                report.deadEndsAverageDepth = sumLen / deadEndKeys.Count;
+                report.deadEndsAverageDepth = 0;
             }
-            else report.deadEndsAverageDepth = 0;
-            report.deadEndsNearTop1Count = 0;
-            report.deadEndsNearTop3Count = 0;
+            else
+            {
+                if (deadEndKeys.Count > 0)
+                {
+                    double sumLen = 0;
+                    foreach (var k in deadEndKeys)
+                    {
+                        if (pathByKey.TryGetValue(k, out var pm)) sumLen += pm.Length;
+                    }
+                    report.deadEndsAverageDepth = sumLen / deadEndKeys.Count;
+                }
+                else report.deadEndsAverageDepth = 0;
+            }
+            // Near counts via strict prefix equality with K=5
+            {
+                int near1 = 0, near3 = 0; int K = 5;
+                if (filtered.Count > 0 && deadEndKeys.Count > 0)
+                {
+                    var top1 = filtered[0]; int top3N = Math.Min(3, filtered.Count);
+                    foreach (var k in deadEndKeys)
+                    {
+                        if (!pathByKey.TryGetValue(k, out var d)) continue;
+                        int L = d.Length; if (L <= K) continue; int pref = L - K;
+                        if (PrefixEqual(d, top1, pref)) near1++;
+                        for (int t = 0; t < top3N; t++) { if (PrefixEqual(d, filtered[t], pref)) { near3++; break; } }
+                    }
+                }
+                report.deadEndsNearTop1Count = near1;
+                report.deadEndsNearTop3Count = near3;
+            }
 
             report.solvedTag = finished ? (filtered.Count > 0 ? "true" : "false") : "capped";
             return report;

@@ -1,4 +1,3 @@
-#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
 using SlimeGrid.Logic;
@@ -140,5 +139,3 @@ namespace SlimeGrid.Tools.ALD
         { if (!on) return; if (!d.TryGetValue(k, out var c)) d[k] = 1; else d[k] = c + 1; }
     }
 }
-#endif
-

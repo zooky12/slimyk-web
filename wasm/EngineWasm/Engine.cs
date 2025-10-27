@@ -147,8 +147,8 @@ namespace SlimeGrid.Logic
                 }
             }
 
-            // Player fall
-            if ((TraitsUtil.ResolveTileMask(s, s.PlayerPos) & Traits.HoleForPlayer) != 0)
+            // Player fall (only when not attached)
+            if (s.AttachedEntityId == null && (TraitsUtil.ResolveTileMask(s, s.PlayerPos) & Traits.HoleForPlayer) != 0)
             {
                 s.GameOver = true;
                 outRes.Deltas.Add(new SetGameOver());

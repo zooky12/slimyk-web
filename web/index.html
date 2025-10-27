@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="ca">
 <head>
   <script type="module" src="./main.js"></script>
@@ -123,6 +123,7 @@
         <div class="play-controls">
           <button id="reset-btn">Reset (R)</button>
           <button id="undo-btn">Undo (E)</button>
+          <button id="next-level" title="Load the next level in the list">Next Level</button>
         </div>
 
         <div class="card levels-card">
@@ -204,6 +205,7 @@
             <div class="build-actions">
               <button id="clear-btn">Clear</button>
               <button id="fill-floor">Fill Walls (non-reachable)</button>
+              <button id="add-four" title="Add one row/column on all four sides">Add 4</button>
               <button id="place-one">Place 1</button>
               <button id="remove-one">Remove 1</button>
               <button id="simplify-keep" title="Simplify level (preserve dead ends)">Simplify (strict)</button>
@@ -258,8 +260,119 @@
             <button id="toggleAuto" aria-pressed="false">Show Auto Creator</button>
           </div>
           <div id="autoPanel" class="hidden" aria-hidden="true">
-            <!-- keep as-is; will wire when solver exports exist -->
-            <div class="progress" id="autoProgress">Idle</div>
+            <div class="auto-controls">
+              <div class="build-groups">
+                <div class="build-section">
+                  <button type="button" class="tile-toggle" data-target="autoTiles" aria-expanded="false">Tiles Allowed To Place</button>
+                  <div class="tile-filter-panel hidden" id="autoTiles" aria-hidden="true">
+                    <div class="tile-filter-options" id="autoTilesChips"></div>
+                  </div>
+                </div>
+                <div class="build-section">
+                  <button type="button" class="tile-toggle" data-target="autoEntities" aria-expanded="false">Entities Allowed To Place</button>
+                  <div class="tile-filter-panel hidden" id="autoEntities" aria-hidden="true">
+                    <div class="tile-filter-options" id="autoEntitiesChips"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="levels-row">
+                <button id="runAuto">Run Auto</button>
+                <button id="keepRunning" title="Reuse current buckets and continue generating">Keep Running</button>
+                <button id="stopAuto" disabled>Stop</button>
+                <button id="autoRestore">Restore Snapshot</button>
+                <label style="margin-left:auto">Levels to generate
+                  <input id="autoAttemptsCount" type="number" value="20" min="1" style="width:96px"/>
+                </label>
+                <label title="Changes applied when starting from the original snapshot">Base changes
+                  <input id="autoBaseChanges" type="number" value="1" min="1" style="width:72px"/>
+                </label>
+                <label title="Changes applied when evolving from a newly accepted level">Evolve changes
+                  <input id="autoEvolveChanges" type="number" value="1" min="1" style="width:72px"/>
+                </label>
+                <label title="Choose among top-K of each bucket as evolution base">
+                  Select top-K
+                  <input id="autoSelectTopK" type="number" value="5" min="1" style="width:72px"/>
+                </label>
+                <label title="Selection skew (0 uniform, 1 proportional to score, >1 favors top)">
+                  Select skew
+                  <input id="autoSelectSkew" type="number" step="0.1" value="1" min="0" style="width:72px"/>
+                </label>
+                <label title="Probability to use the original snapshot as base (0..1). Otherwise pick from buckets.">
+                  Use base chance
+                  <input id="autoBaseUseRatio" type="number" step="0.05" value="0" min="0" max="1" style="width:72px"/>
+                </label>
+                <label title="Fraction of mutations that enable greedy single-edits (0..1)">
+                  Greedy ratio
+                  <input id="autoGreedyRatio" type="number" step="0.05" value="0" min="0" max="1" style="width:72px"/>
+                </label>
+                <label title="Refresh bucket summaries every N attempts">
+                  Refresh every
+                  <input id="autoRefreshEvery" type="number" value="7" min="1" style="width:72px"/>
+                </label>
+              </div>
+              <div class="progress" id="autoProgress">Idle</div>
+            </div>
+
+            <div class="auto-buckets">
+              <div class="section-label">Heuristic Buckets</div>
+              <div id="bucketRows"></div>
+              <div class="levels-row">
+                <input id="bucketName" placeholder="Bucket name" />
+                <select id="bucketHeuristic">
+                  <option value="Easy">Easy</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Hard">Hard</option>
+                  <option value="Hardest">Hardest</option>
+                  <option value="Neutral">Neutral</option>
+                </select>
+                <button id="addBucket">Add Bucket</button>
+              </div>
+            </div>
+
+            <details class="info-panel" open>
+              <summary>Auto Creator Options <span>selection • mutation • buckets</span></summary>
+              <div class="info-content">
+                <div class="info-section">
+                  <h4>Selection</h4>
+                  <ul>
+                    <li>Top‑K: choose from the top K levels of each bucket.</li>
+                    <li>Skew: 0 uniform, 1 proportional to score, >1 favors top.</li>
+                  </ul>
+                </div>
+                <div class="info-section">
+                  <h4>Mutation</h4>
+                  <dl>
+                    <dt>Base changes</dt><dd># of edits when starting from snapshot.</dd>
+                    <dt>Evolve changes</dt><dd># of edits when evolving from a kept level.</dd>
+                    <dt>Allowed tiles/entities</dt><dd>Restricts Replace/Place to the selected sets.</dd>
+                    <dt>Use greedy ops</dt><dd>Enables solver‑guided single edits (Place 1 / Remove 1). Slower, but higher quality.</dd>
+                  </dl>
+                </div>
+                <div class="info-section">
+                  <h4>Buckets</h4>
+                  <dl>
+                    <dt>name</dt><dd>Bucket label, used in UI and summaries.</dd>
+                    <dt>topK</dt><dd>Max entries to keep (0 = unlimited).</dd>
+                    <dt>features[]</dt><dd>List of scoring features.</dd>
+                    <dt>feature.id</dt><dd>Metric key (e.g., solutionLength, solutionsFilteredCount, deadEndsNearTop1Count).</dd>
+                    <dt>feature.mode</dt><dd>Band (target range) or Infinite (bigger is better).</dd>
+                    <dt>feature.bandMin / bandMax</dt><dd>Target range for Band features; hard=true enforces as a strict gate.</dd>
+                    <dt>feature.weight</dt><dd>Contribution of the feature to the score.</dd>
+                    <dt>feature.hard</dt><dd>Reject candidates outside range (Band only).</dd>
+                  </dl>
+                </div>
+                <div class="info-section">
+                  <h4>Solver & Dedupe</h4>
+                  <dl>
+                    <dt>Max depth / Max nodes</dt><dd>Limits for BFS solver per evaluation.</dd>
+                    <dt>Solution dedupe T_sol</dt><dd>Similarity threshold for moves; if distance ≤ T_sol, levels are compared by layout.</dd>
+                    <dt>Layout dedupe T_layout</dt><dd>Similarity threshold for tiles/entities/spatial masks; if ≤ T_layout, higher score wins.</dd>
+                  </dl>
+                </div>
+              </div>
+            </details>
+
             <div id="autoList"></div>
           </div>
         </div>

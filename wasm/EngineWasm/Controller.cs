@@ -1,4 +1,3 @@
-#if UNITY_EDITOR
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -48,7 +47,7 @@ namespace SlimeGrid.Tools.ALD
             {
                 var (raw, reject) = Heuristics.Score(b.Config, seedCand.features, settings.accept_capped_weight);
                 seedCand.rawScore = raw; seedCand.normalizedScore = raw; // first insert; min/max not tracked yet
-                if (!reject && b.PassSimilarity(seedCand)) b.TryInsert(seedCand);
+                if (!reject && b.PassSimilarity(seedCand, new DedupeSettings())) b.TryInsert(seedCand);
             }
 
             var cfg = new SolverConfig();
@@ -88,7 +87,7 @@ namespace SlimeGrid.Tools.ALD
                 foreach (var c in scored)
                 {
                     c.normalizedScore = Normalize(c.rawScore, min, max);
-                    if (b.PassSimilarity(c)) b.TryInsert(c);
+                    if (b.PassSimilarity(c, new DedupeSettings())) b.TryInsert(c);
                 }
             }
         }
@@ -101,5 +100,3 @@ namespace SlimeGrid.Tools.ALD
         }
     }
 }
-#endif
-

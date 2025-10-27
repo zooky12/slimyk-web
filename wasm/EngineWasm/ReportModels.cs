@@ -25,6 +25,14 @@ namespace SlimeGrid.Tools.Solver
         public double deadEndsAverageDepth { get; set; }
         public int deadEndsNearTop1Count { get; set; }
         public int deadEndsNearTop3Count { get; set; }
+
+        // Extra move-analysis metrics (top solutions)
+        public int stepsInBoxTop1 { get; set; }
+        public int stepsFreeTop1 { get; set; }
+        public int dedupMovesLenTop1 { get; set; }
+        public double stepsInBoxTop3Avg { get; set; }
+        public double stepsFreeTop3Avg { get; set; }
+        public double dedupMovesLenTop3Avg { get; set; }
     }
 
     public sealed class CapsInfo

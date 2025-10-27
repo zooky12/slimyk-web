@@ -1,4 +1,3 @@
-#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
 using SlimeGrid.Tools.Solver;
@@ -17,6 +16,11 @@ namespace SlimeGrid.Tools.ALD
 
         public bool TryInsert(LevelCandidate cand)
         {
+            // If topK <= 0, treat as unlimited capacity
+            if (Config.topK <= 0)
+            {
+                heap.Add(cand); HeapUp(heap.Count - 1); return true;
+            }
             if (heap.Count < Config.topK)
             {
                 heap.Add(cand); HeapUp(heap.Count - 1); return true;
@@ -28,24 +32,29 @@ namespace SlimeGrid.Tools.ALD
             return false;
         }
 
-        public bool PassSimilarity(LevelCandidate cand)
+        public bool PassSimilarity(LevelCandidate cand, DedupeSettings global)
         {
-            // First gate: solution similarity vs each kept
+            // First gate: solution similarity vs each kept (global thresholds)
             foreach (var item in heap)
             {
                 var A = item.report.topSolutions.Count > 0 ? Unpack(item.report.topSolutions[0]) : default;
                 var B = cand.report.topSolutions.Count > 0 ? Unpack(cand.report.topSolutions[0]) : default;
                 float solSim = Similarity.SolutionSimilarity(A, B);
-                if (solSim > Config.T_sol) continue; // keep both, don't test layout
+                if (solSim > (float)(global?.T_sol ?? Config.T_sol)) continue; // keep both, don't test layout
 
-                // Otherwise test layout similarity on influence mask
+                // Otherwise test layout similarity on full mask with global weights
                 var levelA = SlimeGrid.Logic.Loader.FromDTO(item.dto);
                 var levelB = SlimeGrid.Logic.Loader.FromDTO(cand.dto);
-                var maskA = InfluenceMask.Compute(levelA);
-                float lay = Similarity.LayoutSimilarity(levelA, levelB, maskA, 8, Config.w_tiles, Config.w_entities, Config.w_spatial);
-                if (lay <= Config.T_layout)
+                int N = 8;
+                var maskAll = new bool[levelA.Grid.W, levelA.Grid.H];
+                for (int y = 0; y < levelA.Grid.H; y++) for (int x = 0; x < levelA.Grid.W; x++) maskAll[x, y] = true;
+                float wT = global != null ? global.w_tiles : Config.w_tiles;
+                float wE = global != null ? global.w_entities : Config.w_entities;
+                float wS = global != null ? global.w_spatial : Config.w_spatial;
+                float lay = Similarity.LayoutSimilarity(levelA, levelB, maskAll, N, wT, wE, wS);
+                if (lay <= (float)(global?.T_layout ?? Config.T_layout))
                 {
-                    // Too similar — keep higher-scoring
+                    // Too similar – keep higher-scoring
                     return cand.normalizedScore > item.normalizedScore;
                 }
             }
@@ -82,5 +91,3 @@ namespace SlimeGrid.Tools.ALD
         }
     }
 }
-#endif
-
