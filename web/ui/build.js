@@ -137,6 +137,33 @@ export function setupBuildUI(api, {
     return { width: w, height: h, tileGrid, entities };
   }
 
+  // Rotate a LevelDTO 90 degrees clockwise. Entities positions updated accordingly.
+  function rotateLevelDTOcw(level){
+    const W = level.width|0, H = level.height|0;
+    const out = { width: H, height: W, tileGrid: Array.from({length: W}, ()=> new Array(H)), entities: [] };
+    // tiles
+    for (let y=0;y<H;y++) for (let x=0;x<W;x++){
+      const nx = H - 1 - y;
+      const ny = x;
+      out.tileGrid[ny][nx] = level.tileGrid[y][x];
+    }
+    // orientation CCW map to preserve relative orientation when rotating level CW
+    const ccw = { N:'W', W:'S', S:'E', E:'N' };
+    // entities
+    for (const e of level.entities || []){
+      if (!e) continue;
+      const nx = H - 1 - (e.y|0);
+      const ny = (e.x|0);
+      const ne = { type: e.type, x: nx, y: ny };
+      if (e.orientation && typeof e.orientation === 'string'){
+        const up = e.orientation.toUpperCase();
+        ne.orientation = ccw[up] || up;
+      }
+      out.entities.push(ne);
+    }
+    return out;
+  }
+
   async function setTile(x, y, name, rotName = 'N') {
     await api.applyEdit(EDIT.SetTile, x, y, tileId(name), orientId(rotName));
   }
@@ -368,6 +395,25 @@ export function setupBuildUI(api, {
   if (downBtn) downBtn.addEventListener('click', ()=>doResize('down'));
   if (leftBtn) leftBtn.addEventListener('click', ()=>doResize('left'));
   if (rightBtn) rightBtn.addEventListener('click', ()=>doResize('right'));
+
+  // Rotate level clockwise button
+  const rotateBtn = document.getElementById('rotate-cw');
+  if (rotateBtn) rotateBtn.addEventListener('click', async () => {
+    if (!isBuildMode()) return;
+    rotateBtn.disabled = true;
+    try {
+      const d = dto(); if (!d) return;
+      onSnapshot();
+      const level = toLevelDTOFromDraw(d);
+      const rotated = rotateLevelDTOcw(level);
+      await api.setState(rotated);
+      markModified();
+      requestRedraw();
+    } catch (e) {
+      console.warn('Rotate CW failed', e);
+      alert('Rotate failed: ' + (e?.message || e));
+    } finally { rotateBtn.disabled = false; }
+  });
 
   // Add 4: add one row/column on all 4 sides
   async function addFour() {
