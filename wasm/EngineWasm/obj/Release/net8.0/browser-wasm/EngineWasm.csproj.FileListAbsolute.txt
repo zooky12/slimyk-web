@@ -1,7 +1,6 @@
 C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\bin\Release\net8.0\browser-wasm\EngineWasm.deps.json
 C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\bin\Release\net8.0\browser-wasm\EngineWasm.runtimeconfig.json
 C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\bin\Release\net8.0\browser-wasm\EngineWasm.dll
-C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\bin\Release\net8.0\browser-wasm\EngineWasm.pdb
 C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\bin\Release\net8.0\browser-wasm\Newtonsoft.Json.dll
 C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\bin\Release\net8.0\browser-wasm\Microsoft.CSharp.dll
 C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\bin\Release\net8.0\browser-wasm\Microsoft.VisualBasic.Core.dll
@@ -228,10 +227,8 @@ C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\obj\Release\ne
 C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\obj\Release\net8.0\browser-wasm\EngineWasm.AssemblyInfoInputs.cache
 C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\obj\Release\net8.0\browser-wasm\EngineWasm.AssemblyInfo.cs
 C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\obj\Release\net8.0\browser-wasm\EngineWasm.csproj.CoreCompileInputs.cache
-C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\obj\Release\net8.0\browser-wasm\EngineWasm.sourcelink.json
 C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\obj\Release\net8.0\browser-wasm\EngineWasm.csproj.CopyComplete
 C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\obj\Release\net8.0\browser-wasm\EngineWasm.dll
 C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\obj\Release\net8.0\browser-wasm\refint\EngineWasm.dll
-C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\obj\Release\net8.0\browser-wasm\EngineWasm.pdb
 C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\obj\Release\net8.0\browser-wasm\EngineWasm.genruntimeconfig.cache
 C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\obj\Release\net8.0\browser-wasm\ref\EngineWasm.dll

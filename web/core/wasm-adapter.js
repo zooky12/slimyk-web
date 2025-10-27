@@ -20,7 +20,7 @@ export async function initWasm(baseUrl) {
   try {
     dotnetMod = await import('../wasm/_framework/dotnet.js');
   } catch (e) {
-    dotnetMod = await import(/* @vite-ignore */ (fw + 'dotnet.js'));
+    dotnetMod = await import(/* @vite-ignore */ (fw + 'dotnet.js?v=3'));
   }
 
   const { getAssemblyExports, getConfig } = await dotnetMod.dotnet

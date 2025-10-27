@@ -1,7 +1,6 @@
 C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\bin\Release\net8.0\browser-wasm\publish\EngineWasm.dll
 C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\bin\Release\net8.0\browser-wasm\publish\EngineWasm.deps.json
 C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\bin\Release\net8.0\browser-wasm\publish\EngineWasm.runtimeconfig.json
-C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\bin\Release\net8.0\browser-wasm\publish\EngineWasm.pdb
 C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\bin\Release\net8.0\browser-wasm\publish\Microsoft.CSharp.dll
 C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\bin\Release\net8.0\browser-wasm\publish\Microsoft.VisualBasic.Core.dll
 C:\Users\zooky\UnityProjects\slimk-web\slimyk-web\wasm\EngineWasm\bin\Release\net8.0\browser-wasm\publish\Microsoft.VisualBasic.dll

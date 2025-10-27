@@ -1,0 +1,9 @@
+# Prevent Git from altering framework asset bytes on checkout/commit
+web/wasm/_framework/* -text
+
+# Treat these as binary to avoid CRLF normalization
+*.symbols binary
+*.wasm binary
+*.dat binary
+*.br binary
+*.gz binary

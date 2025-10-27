@@ -13,6 +13,13 @@
     <DefineConstants>$(DefineConstants);BROWSER;EXPOSE_WASM</DefineConstants>
   </PropertyGroup>
 
+  <!-- Ensure Release builds do not emit separate debug symbols (avoids .symbols fetch on Pages) -->
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <EmitEmbeddedDebugInformation>false</EmitEmbeddedDebugInformation>
+  </PropertyGroup>
+
   <ItemGroup>
     <Using Include="System.Runtime.InteropServices.JavaScript" />
   </ItemGroup>
