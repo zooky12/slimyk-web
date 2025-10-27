@@ -29,9 +29,23 @@ export async function initWasm(baseUrl) {
       // GitHub Pages + SRI: bypass integrity fetch for optional symbol files
       loadBootResource: (type, name, defaultUri, integrity) => {
         try {
-          if (typeof name === 'string' && name.endsWith('.symbols')) {
-            // Provide an empty successful response so the runtime doesn't fail on SRI mismatch
+          const nm = String(name || '');
+          // 1) Strip symbol assets (GH Pages SRI mismatch)
+          if (nm.endsWith('.symbols') || nm.includes('.symbols')) {
             return new Response(new Blob(['']), { status: 200, headers: { 'content-type': 'application/octet-stream' } });
+          }
+          // 2) Sanitize boot manifest to drop wasmSymbols entirely
+          if (nm === 'blazor.boot.json' || nm.endsWith('/blazor.boot.json')) {
+            return (async () => {
+              const res = await fetch(defaultUri, { cache: 'no-store' });
+              const json = await res.json();
+              if (json && json.resources) {
+                // Remove symbol entries if present
+                if (json.resources.wasmSymbols) json.resources.wasmSymbols = {};
+              }
+              const blob = new Blob([JSON.stringify(json)], { type: 'application/json' });
+              return new Response(blob, { status: 200, headers: { 'content-type': 'application/json' } });
+            })();
           }
         } catch {}
         return defaultUri;
