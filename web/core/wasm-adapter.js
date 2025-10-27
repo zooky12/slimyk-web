@@ -23,9 +23,21 @@ export async function initWasm(baseUrl) {
     dotnetMod = await import(/* @vite-ignore */ (fw + 'dotnet.js'));
   }
 
-    const { getAssemblyExports, getConfig } = await dotnetMod.dotnet
-      .withModuleConfig({ locateFile: (p) => new URL(p, fw).href })
-      .create();
+  const { getAssemblyExports, getConfig } = await dotnetMod.dotnet
+    .withModuleConfig({
+      locateFile: (p) => new URL(p, fw).href,
+      // GitHub Pages + SRI: bypass integrity fetch for optional symbol files
+      loadBootResource: (type, name, defaultUri, integrity) => {
+        try {
+          if (typeof name === 'string' && name.endsWith('.symbols')) {
+            // Provide an empty successful response so the runtime doesn't fail on SRI mismatch
+            return new Response(new Blob(['']), { status: 200, headers: { 'content-type': 'application/octet-stream' } });
+          }
+        } catch {}
+        return defaultUri;
+      }
+    })
+    .create();
     const cfg = getConfig();
 
     // Try to obtain exports from plausible assemblies
