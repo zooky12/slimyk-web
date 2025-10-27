@@ -34,9 +34,8 @@ export async function initWasm(baseUrl) {
         loadBootResource: (type, name, defaultUri /*, integrity*/) => {
           // 1) Never request .symbols directly
           if (String(name).includes(".symbols")) {
-            // Return a URL to an empty, same-origin file you ship (prevents mixed-origin SRI headaches),
-            // OR just point to a tiny data: URL.
-            return "data:application/octet-stream;base64,";
+            // Return empty response and prevent integrity checks entirely
+            return new Response('', { status: 204 });
           }
 
           // 2) Sanitize blazor.boot.json so it contains no *.symbols entries at all
@@ -110,8 +109,10 @@ export async function initWasm(baseUrl) {
             })();
           }
 
-          // default path
-          return defaultUri;
+          // default path: bypass SRI by fetching ourselves (no integrity)
+          const url = String(defaultUri || '');
+          const bust = (url.includes('?') ? '&' : '?') + 'v=3';
+          return fetch(url + bust, { cache: 'no-store' });
         },
       })
       .create();
