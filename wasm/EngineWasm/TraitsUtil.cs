@@ -33,12 +33,12 @@ namespace SlimeGrid.Logic
         }
 
         // Convenience tests (keep the precedence “stop > stick > pass” in mind at call sites)
-        public static bool TileStopsPlayer(GameState s, V2 p) => (ResolveTileMask(s, p) & Traits.StopsPlayer) != 0;
-        public static bool TileStopsEntity(GameState s, V2 p) => (ResolveTileMask(s, p) & Traits.StopsEntity) != 0;
-        public static bool TileSticksEntity(GameState s, V2 p) => (ResolveTileMask(s, p) & Traits.SticksEntity) != 0;
-        public static bool TileStopsTumble(GameState s, V2 p) => (ResolveTileMask(s, p) & Traits.StopsTumble) != 0;
-        public static bool TileStopsFlight(GameState s, V2 p) => (ResolveTileMask(s, p) & Traits.StopsFlight) != 0;
-        public static bool TileSticksFlight(GameState s, V2 p) => (ResolveTileMask(s, p) & Traits.SticksFlight) != 0;
-        public static bool TileIsSlippery(GameState s, V2 p) => (ResolveTileMask(s, p) & Traits.Slipery) != 0;
+        public static bool TileStopsPlayer(GameState s, V2 p) => (ResolveEffectiveMask(s, p) & Traits.StopsPlayer) != 0;
+        public static bool TileStopsEntity(GameState s, V2 p) => (ResolveEffectiveMask(s, p) & Traits.StopsEntity) != 0;
+        public static bool TileSticksEntity(GameState s, V2 p) => (ResolveEffectiveMask(s, p) & Traits.SticksEntity) != 0;
+        public static bool TileStopsTumble(GameState s, V2 p) => (ResolveEffectiveMask(s, p) & Traits.StopsTumble) != 0;
+        public static bool TileStopsFlight(GameState s, V2 p) => (ResolveEffectiveMask(s, p) & Traits.StopsFlight) != 0;
+        public static bool TileSticksFlight(GameState s, V2 p) => (ResolveEffectiveMask(s, p) & Traits.SticksFlight) != 0;
+        public static bool TileIsSlippery(GameState s, V2 p) => (ResolveEffectiveMask(s, p) & Traits.Slipery) != 0;
     }
 }

@@ -21,6 +21,7 @@ namespace SlimeGrid.Logic
     public enum CueType : byte
     {
         Bump, SlideStart, SlideEnd,
+        EntitySlideStart, EntitySlideEnd,
         FlyStart, FlyEnd,
         PushStart, PushEnd,
         TumbleStart, TumbleEnd,
