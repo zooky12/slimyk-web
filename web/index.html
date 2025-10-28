@@ -459,42 +459,6 @@
       nextReadyAt = Date.now() + MOVE_COOLDOWN_MS;
     }
 
-    function installSwipe(el, cb, opts = {}) {
-      const THRESH = opts.threshold ?? 24; // px you must move before it counts
-      let id = null, x0 = 0, y0 = 0;
-
-      el.addEventListener('pointerdown', (e) => {
-        // ignore right/middle mouse, allow touch/pen/left mouse
-        if (e.pointerType === 'mouse' && e.button !== 0) return;
-        id = e.pointerId;
-        x0 = e.clientX; y0 = e.clientY;
-        el.setPointerCapture(id);        // keep the stream even if finger leaves canvas
-      });
-
-      el.addEventListener('pointerup', (e) => {
-        if (e.pointerId !== id) return;
-        const dx = e.clientX - x0;
-        const dy = e.clientY - y0;
-        id = null;
-
-        if (Math.hypot(dx, dy) < THRESH) return;   // too short: ignore tap
-        if (Math.abs(dx) > Math.abs(dy)) cb(dx > 0 ? 'right' : 'left');
-        else                              cb(dy > 0 ? 'down'  : 'up');
-      });
-
-      el.addEventListener('pointercancel', () => { id = null; });
-    }
-    const canvasEl = document.getElementById('game');
-
-    // map to your engine's directions: 0=up,1=right,2=down,3=left
-    const dirIdx = { up:0, right:1, down:2, left:3 };
-
-    installSwipe(canvasEl, (dir) => {
-      // respect your cooldown / buildMode guards if needed
-      stepDir(dirIdx[dir]);
-    });
-
-
     // Keys
     window.addEventListener('keydown', (e)=>{
       const key = e.key.toLowerCase();

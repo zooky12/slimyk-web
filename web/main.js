@@ -327,7 +327,9 @@ const requestRedraw = () => {
     console.error(e);
   }
 };
-try { window.requestRedraw = requestRedraw; } catch {}
+try {
+  window.requestRedraw = requestRedraw;
+} catch {}
 requestRedraw();
 window.addEventListener("resize", requestRedraw);
 
@@ -407,9 +409,7 @@ function isAnyMenuOpen() {
     return !!(el && !el.classList.contains("hidden"));
   })();
   // Any expanded collapsible
-  const anyExpanded = document.querySelector(
-    ".tile-filter-panel:not(.hidden)"
-  );
+  const anyExpanded = document.querySelector(".tile-filter-panel:not(.hidden)");
   return autoOpen || solverOpen || buildOpen || !!anyExpanded;
 }
 
@@ -475,7 +475,9 @@ function __closePanelsExcept(active) {
   });
 }
 
-try { window.__closePanelsExcept = __closePanelsExcept; } catch {}
+try {
+  window.__closePanelsExcept = __closePanelsExcept;
+} catch {}
 
 // HUD wiring
 setupHUD({
@@ -501,12 +503,12 @@ setupHUD({
   },
   onNextLevel: async () => {
     try {
-      const worldSel = document.getElementById('server-worlds');
-      const levelSel = document.getElementById('server-levels');
+      const worldSel = document.getElementById("server-worlds");
+      const levelSel = document.getElementById("server-levels");
       if (!levelSel) return;
       const loadCurrent = async () => {
-        const world = worldSel?.value || '.';
-        const level = levelSel?.value || '';
+        const world = worldSel?.value || ".";
+        const level = levelSel?.value || "";
         if (!level) return;
         const obj = await loadWorldLevel(world, level);
         api.setState(obj);
@@ -514,22 +516,31 @@ setupHUD({
       };
 
       // If there is a next level in the current list, go to it
-      if (levelSel.selectedIndex >= 0 && levelSel.selectedIndex < levelSel.options.length - 1) {
+      if (
+        levelSel.selectedIndex >= 0 &&
+        levelSel.selectedIndex < levelSel.options.length - 1
+      ) {
         levelSel.selectedIndex = levelSel.selectedIndex + 1;
         await loadCurrent();
         return;
       }
 
       // Otherwise, try next world (first level)
-      if (worldSel && worldSel.selectedIndex >= 0 && worldSel.selectedIndex < worldSel.options.length - 1) {
+      if (
+        worldSel &&
+        worldSel.selectedIndex >= 0 &&
+        worldSel.selectedIndex < worldSel.options.length - 1
+      ) {
         worldSel.selectedIndex = worldSel.selectedIndex + 1;
-        const world = worldSel.value || '.';
+        const world = worldSel.value || ".";
         const levels = await loadLevelListForWorld(world);
         if (Array.isArray(levels) && levels.length) {
-          levelSel.innerHTML = '';
+          levelSel.innerHTML = "";
           for (const l of levels) {
-            const opt = document.createElement('option');
-            opt.value = l; opt.textContent = l; levelSel.appendChild(opt);
+            const opt = document.createElement("option");
+            opt.value = l;
+            opt.textContent = l;
+            levelSel.appendChild(opt);
           }
           levelSel.selectedIndex = 0;
           await loadCurrent();
@@ -537,7 +548,7 @@ setupHUD({
         }
       }
     } catch (e) {
-      console.warn('[main] next level failed', e);
+      console.warn("[main] next level failed", e);
     }
   },
   onReset: () => {
@@ -556,14 +567,18 @@ setupHUD({
     if (!willOpen) {
       const ae = document.activeElement;
       if (ae && panel.contains(ae)) {
-        try { btn.focus(); } catch {}
+        try {
+          btn.focus();
+        } catch {}
       }
     } else {
       const first = panel.querySelector(
         'input, button, select, textarea, [tabindex]:not([tabindex="-1"])'
       );
       if (first && typeof first.focus === "function") {
-        try { first.focus(); } catch {}
+        try {
+          first.focus();
+        } catch {}
       }
     }
   },
@@ -655,22 +670,30 @@ setupHUD({
       };
       const levelDto = toLevelDTO(api.getState());
       // Use worker proxy for solver to keep UI responsive
-      const worker = new Worker(new URL('./workers/ald-worker.js', import.meta.url), { type: 'module' });
+      const worker = new Worker(
+        new URL("./workers/ald-worker.js", import.meta.url),
+        { type: "module" }
+      );
       let nextId = 1;
       const pending = new Map();
       worker.onmessage = (ev) => {
         const { id, ok, result, error } = ev.data || {};
-        const f = pending.get(id); if (!f) return;
+        const f = pending.get(id);
+        if (!f) return;
         pending.delete(id);
-        if (ok) f.resolve(result); else f.reject(new Error(error || 'worker_error'));
+        if (ok) f.resolve(result);
+        else f.reject(new Error(error || "worker_error"));
       };
-      const call = (cmd, ...args) => new Promise((resolve, reject) => {
-        const id = nextId++;
-        pending.set(id, { resolve, reject });
-        worker.postMessage({ id, cmd, args });
-      });
-      try { await call('init', { baseUrl: './wasm/' }); } catch {}
-      const report = await call('solverAnalyze', levelDto, cfg);
+      const call = (cmd, ...args) =>
+        new Promise((resolve, reject) => {
+          const id = nextId++;
+          pending.set(id, { resolve, reject });
+          worker.postMessage({ id, cmd, args });
+        });
+      try {
+        await call("init", { baseUrl: "./wasm/" });
+      } catch {}
+      const report = await call("solverAnalyze", levelDto, cfg);
       try {
         console.debug && console.debug("Solver report:", report);
       } catch {}
@@ -732,7 +755,9 @@ setupHUD({
       };
       onSolutions &&
         onSolutions({ solutions, deadEnds: [], stats, reportRaw: report });
-      try { worker.terminate(); } catch {}
+      try {
+        worker.terminate();
+      } catch {}
     } catch (err) {
       try {
         console.error && console.error("[main] onRunSolver error", err);
@@ -775,6 +800,66 @@ setupHUD({
       URL.revokeObjectURL(url);
     } catch {}
   },
+});
+
+// ---- swipe input ----
+function installSwipe(el, cb, opts = {}) {
+  const THRESH = opts.threshold ?? 24; // px required to count
+  let id = null,
+    x0 = 0,
+    y0 = 0;
+
+  el.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    id = e.pointerId;
+    x0 = e.clientX;
+    y0 = e.clientY;
+    el.setPointerCapture(id);
+  });
+
+  el.addEventListener("pointerup", (e) => {
+    if (e.pointerId !== id) return;
+    const dx = e.clientX - x0;
+    const dy = e.clientY - y0;
+    id = null;
+    if (Math.hypot(dx, dy) < THRESH) return;
+    cb(
+      Math.abs(dx) > Math.abs(dy)
+        ? dx > 0
+          ? "right"
+          : "left"
+        : dy > 0
+        ? "down"
+        : "up"
+    );
+  });
+
+  el.addEventListener("pointercancel", () => {
+    id = null;
+  });
+}
+
+//const canvasEl = document.getElementById("game");
+const dirIdx = { up: 0, right: 1, down: 2, left: 3 };
+
+installSwipe(canvasEl, (dir) => {
+  if (!canvasEl) return;
+  if (isAnyMenuOpen() || buildMode || gameOver) return;
+
+  const d = dirIdx[dir];
+  if (d == null) return;
+
+  try {
+    const r = api.step(d); // <-- use your engine wrapper
+    if (r && (r.win || r.lose)) {
+      gameOver = true;
+      setBanner(r.win ? "win" : "lose");
+    } else {
+      setBanner(null);
+    }
+  } finally {
+    requestRedraw(); // <-- paint the new frame
+  }
 });
 
 // Keyboard controls (WASD/Arrows)
@@ -889,4 +974,3 @@ function toLevelDTO(draw) {
 try {
   setupAutoLiteUI(api);
 } catch {}
-
