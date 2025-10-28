@@ -35,7 +35,7 @@ export async function initWasm(baseUrl) {
           // 1) Never request .symbols directly
           if (String(name).includes(".symbols")) {
             // Return empty response and prevent integrity checks entirely
-            return new Response('', { status: 204 });
+            return new Response("", { status: 204 });
           }
 
           // 2) Sanitize blazor.boot.json so it contains no *.symbols entries at all
@@ -110,9 +110,9 @@ export async function initWasm(baseUrl) {
           }
 
           // default path: bypass SRI by fetching ourselves (no integrity)
-          const url = String(defaultUri || '');
-          const bust = (url.includes('?') ? '&' : '?') + 'v=3';
-          return fetch(url + bust, { cache: 'no-store' });
+          const url = String(defaultUri || "");
+          const bust = (url.includes("?") ? "&" : "?") + "v=3";
+          return fetch(url + "?v=4", { cache: "no-store" });
         },
       })
       .create();
