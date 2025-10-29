@@ -320,6 +320,12 @@ function setBanner(kind) {
   if (kind === "win") bannerEl.textContent = "You Win!";
   else if (kind === "lose") bannerEl.textContent = "Game Over";
 }
+function clearGameStatus() {
+  gameOver = false;
+  try {
+    setBanner(null);
+  } catch {}
+}
 const requestRedraw = () => {
   try {
     draw(api.getState());
@@ -512,6 +518,7 @@ setupHUD({
         if (!level) return;
         const obj = await loadWorldLevel(world, level);
         api.setState(obj);
+        clearGameStatus();
         requestRedraw();
       };
 
@@ -611,6 +618,7 @@ setupHUD({
       try {
         const obj = await loadWorldLevel(world, levels[0]);
         api.setState(obj);
+        clearGameStatus();
         requestRedraw();
       } catch {}
     }
@@ -633,6 +641,7 @@ setupHUD({
           try {
             const obj = await loadWorldLevel(w, lvl[0]);
             api.setState(obj);
+            clearGameStatus();
             requestRedraw();
           } catch {}
         }
@@ -649,12 +658,14 @@ setupHUD({
       levelSel.value || ""
     );
     api.setState(obj);
+    clearGameStatus();
     requestRedraw();
   },
   onExport: (name) => exportLevel(api.getState(), name || "level.json"),
   onImport: async (file) => {
     const obj = await importLevel(file);
     api.setState(obj);
+    clearGameStatus();
     requestRedraw();
   },
   onRunSolver: async ({ maxDepth, maxNodes, onProgress, onSolutions }) => {
