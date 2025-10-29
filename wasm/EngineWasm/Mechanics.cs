@@ -11,8 +11,9 @@ namespace SlimeGrid.Logic
         // -------------------- WALK (tile-first; single MoveStraight) --------------------
         public static bool Walk(GameState s, Dir d, StepResult outRes)
         {
-            if (!DoSlidePlayer(s, s.PlayerPos, d, outRes) && !DoPlayerMovement(s, d, outRes)) return false;
-            return true;
+            if (DoSlidePlayer(s, s.PlayerPos, d, outRes)) return true;
+            if (DoPlayerMovement(s, d, outRes)) return true;
+            return false;
         }
 
         // -------------------- PUSH CHAIN (tile-first; validate every step) -------------
@@ -65,66 +66,6 @@ namespace SlimeGrid.Logic
             }
             return true;
         }
-        /*
-                    // ------------------------------
-
-                    // Perform moves from front to back
-                    outRes.Add(new AnimationCue(CueType.PushStart, s.EntitiesById[chain[0]].Pos, 0.3f));
-                    // Helper to perform one push step (already validated)
-                    void DoPushStep()
-                    {
-                        for (int i = chain.Count - 1; i >= 0; --i)
-                        {
-                            var id = chain[i];
-                            var from = s.EntitiesById[id].Pos;
-                            var to = new V2(from.x + dx, from.y + dy);
-
-                            s.EntityAt.Remove(from);
-                            s.EntityAt[to] = id;
-                            s.EntitiesById[id].Pos = to;
-
-                            outRes.Add(new MoveEntity(id, from, to, "push"));
-                        }
-
-                        if (s.AttachedEntityId is int ae && chain.Contains(ae))
-                        {
-                            var pf = s.PlayerPos;
-                            s.PlayerPos = new V2(pf.x + dx, pf.y + dy);
-                            outRes.Add(new MoveEntity(-1, pf, s.PlayerPos, "pushPlayer"));
-                        }
-                    }
-
-                    // Execute first validated step
-                    DoPushStep();
-
-                    // Continue sliding while lead entity sits on Slipery
-                    while (true)
-                    {
-                        var headId = chain[0];
-                        var headPos = s.EntitiesById[headId].Pos;
-                        var headTile = TraitsUtil.ResolveTileMask(s, headPos);
-                        if ((headTile & Traits.Slipery) == 0) break;
-
-                        // Recompute targets for next slide and validate again
-                        bool blocked = false;
-                        for (int i = 0; i < chain.Count; i++)
-                        {
-                            var from = s.EntitiesById[chain[i]].Pos;
-                            var to2 = new V2(from.x + dx, from.y + dy);
-                            if (!InB(s, to2)) { blocked = true; break; }
-                            var tmask = TraitsUtil.ResolveTileMask(s, to2);
-                            if ((tmask & Traits.StopsEntity) != 0 || (tmask & Traits.SticksEntity) != 0) { blocked = true; break; }
-                            if (s.EntityAt.ContainsKey(to2)) { blocked = true; break; }
-                        }
-                        if (blocked) break;
-
-                        DoPushStep();
-                    }
-
-                    outRes.Add(new AnimationCue(CueType.PushEnd, s.EntitiesById[chain[0]].Pos, 0.3f));
-                    return true;
-                }
-        */
         // -------------------- TUMBLE (tile-first; no push fallback here) --------------
         public static bool Tumble(GameState s, int entityId, Dir d, StepResult outRes)
         {
@@ -171,51 +112,30 @@ namespace SlimeGrid.Logic
         {
             var (dx, dy) = d.Vec();
             var from = s.PlayerPos;
-            var cur = from;
             var moved = false;
 
-            while (true)
-            {
-                var next = new V2(cur.x + dx, cur.y + dy);
-                bool stopped = false;
-                if ((TraitsUtil.ResolveEffectiveMask(s, next) & Traits.StopsFlight) != 0)
-                {
-                    if (!moved)
-                    {
-                        outRes.Add(new Blocked(Actor.Player, Verb.Fly, d, next, BlockReason.BreakableStopsFlight));
-                        outRes.Add(new AnimationCue(CueType.Bump, next, 0.55f));
-                        return false;
-                    }
-                    stopped = true;
-                }
-                outRes.Add(new AnimationCue(CueType.FlyStart, from, 0.35f));
-                if (!stopped && (TraitsUtil.ResolveEffectiveMask(s, next) & Traits.SticksFlight) != 0)
-                {
-                    // Enter and stop ON the cell (attachment will resolve later)
-                    cur = next; moved = true;
-                    stopped = true; // stop BEFORE
-                }
-                if (s.EntityAt.TryGetValue(next, out var eid) && (s.EntitiesById[eid].Traits & Traits.Breakable) != 0)
-                {
-                    s.EntityAt.Remove(next);
-                    s.EntitiesById.Remove(eid);
-                    outRes.Add(new DestroyEntity(eid, next, "break"));
-                    outRes.Add(new AnimationCue(CueType.BreakImpact, next, 0.6f));
-                }
-                if (stopped) break;
-                // 4) move into next
-                cur = next; moved = true;
-            }
-
-            if (!moved) return false;
-            s.PlayerPos = cur;
+            var next = CheckFly(s, d);
+            if (next.Equals(from)) return false;
+            outRes.Add(new AnimationCue(CueType.FlyStart, from, 0.35f));
+            s.PlayerPos = next;
             s.AttachedEntityId = null;
             s.EntryDir = null;
-            outRes.Deltas.Add(new SetAttachment(null, null));
-            s.EntryDir = null;
-            int tiles = System.Math.Abs(cur.x - from.x) + System.Math.Abs(cur.y - from.y);
-            outRes.Add(new MoveStraight(-1, from, cur, d, tiles, "fly"));
-            outRes.Add(new AnimationCue(CueType.FlyEnd, cur, 0.35f));
+            outRes.Add(new SetAttachment(null, null));
+            outRes.Add(new AnimationCue(CueType.FlyEnd, next, 0.35f));
+            // for all entities with breakable flight between from and next, break them
+            foreach (var eid in s.EntitiesById.Keys)
+            {
+                var e = s.EntitiesById[eid];
+                if ((TraitsUtil.ResolveEffectiveMask(s, e.Pos) & Traits.Breakable) == 0) continue;
+                if (e.Pos.Equals(from)) continue;
+                if (e.Pos.x > from.x && e.Pos.x < next.x && e.Pos.y > from.y && e.Pos.y < next.y)
+                {
+                    s.EntityAt.Remove(e.Pos);
+                    s.EntitiesById.Remove(eid);
+                    outRes.Add(new DestroyEntity(eid, e.Pos, "break"));
+                    outRes.Add(new AnimationCue(CueType.BreakImpact, e.Pos, 0.6f));
+                }
+            }
             return true;
         }
         // -------------------- HELPERS --------------------
@@ -329,6 +249,17 @@ namespace SlimeGrid.Logic
         {
             if (s.AttachedEntityId == null) return;
             else s.PlayerPos = s.EntitiesById[(int)s.AttachedEntityId].Pos;
+        }
+        private static V2 CheckFly(GameState s, Dir d)
+        {
+            var cur = s.PlayerPos;
+            while (true)
+            {
+                var next = cur + d.Vec();
+                if (TraitsUtil.TileStopsFlight(s, next)) return cur;
+                if (TraitsUtil.TileSticksFlight(s, next)) return next;
+                cur = next;
+            }
         }
     }
 }
