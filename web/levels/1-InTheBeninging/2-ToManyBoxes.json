@@ -139,7 +139,7 @@
       "orientation": "N"
     },
     {
-      "type": "PlayerSpawn",
+      "type": "PlayerSpaw",
       "x": 5,
       "y": 1
     }
