@@ -1004,6 +1004,15 @@ window.addEventListener("keydown", (e) => {
     logPlayerState("After reset");
     return;
   }
+  if (e.code === "KeyE") {
+    e.preventDefault();
+    api.undo();
+    setBanner(null);
+    gameOver = false;
+    requestRedraw();
+    logPlayerState("Undid");
+    return;
+  }
   const dir = keyToDir.get(e.code);
   if (dir == null) return;
   e.preventDefault();
