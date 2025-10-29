@@ -1,93 +1,93 @@
 {
-  "size": {
-    "rows": 8,
-    "cols": 5
-  },
-  "base": [
+  "tileGrid": [
     [
-      "wall",
-      "wall",
-      "wall",
-      "wall",
-      "wall"
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall"
     ],
     [
-      "wall",
-      "floor",
-      "wall",
-      "wall",
-      "wall"
+      "Wall",
+      "Wall",
+      "Floor",
+      "Wall",
+      "Wall",
+      "Wall"
     ],
     [
-      "wall",
-      "floor",
-      "floor",
-      "wall",
-      "wall"
+      "Wall",
+      "Wall",
+      "Floor",
+      "Floor",
+      "Wall",
+      "Wall"
     ],
     [
-      "wall",
-      "floor",
-      "floor",
-      "hole",
-      "wall"
+      "Wall",
+      "Wall",
+      "Floor",
+      "Floor",
+      "Hole",
+      "Wall"
     ],
     [
-      "wall",
-      "floor",
-      "wall",
-      "wall",
-      "wall"
+      "Wall",
+      "Wall",
+      "Floor",
+      "Wall",
+      "Wall",
+      "Wall"
     ],
     [
-      "wall",
-      "exit",
-      "wall",
-      "wall",
-      "wall"
+      "Wall",
+      "Wall",
+      "Exit",
+      "Wall",
+      "Wall",
+      "Wall"
     ],
     [
-      "wall",
-      "hole",
-      "wall",
-      "wall",
-      "wall"
+      "Wall",
+      "Wall",
+      "Hole",
+      "Wall",
+      "Wall",
+      "Wall"
     ],
     [
-      "wall",
-      "wall",
-      "wall",
-      "wall",
-      "wall"
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall"
     ]
   ],
   "entities": [
     {
-      "type": "player",
-      "x": 1,
-      "y": 1,
-      "state": {
-        "mode": "free",
-        "entryDir": {
-          "dx": 0,
-          "dy": 0
-        }
-      }
+      "type": "BoxBasic",
+      "x": 2,
+      "y": 2,
+      "orientation": "N"
     },
     {
-      "type": "box",
-      "x": 1,
-      "y": 2
+      "type": "BoxBasic",
+      "x": 2,
+      "y": 3,
+      "orientation": "N"
     },
     {
-      "type": "box",
-      "x": 1,
-      "y": 3
+      "type": "BoxBasic",
+      "x": 2,
+      "y": 4,
+      "orientation": "N"
     },
     {
-      "type": "box",
-      "x": 1,
-      "y": 4
+      "type": "PlayerSpawn",
+      "x": 2,
+      "y": 1
     }
   ]
 }

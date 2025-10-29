@@ -13,55 +13,23 @@
       "Floor",
       "Floor",
       "Floor",
-      "Floor",
-      "Wall"
-    ],
-    [
-      "Wall",
-      "Floor",
-      "Floor",
-      "Floor",
-      "Floor",
-      "Wall"
-    ],
-    [
-      "Wall",
-      "Floor",
-      "Floor",
-      "Floor",
-      "Floor",
-      "Wall"
-    ],
-    [
-      "Wall",
-      "Floor",
-      "Floor",
-      "Floor",
-      "Floor",
-      "Wall"
-    ],
-    [
-      "Wall",
-      "Wall",
-      "Wall",
-      "Wall",
-      "Floor",
-      "Wall"
-    ],
-    [
-      "Wall",
-      "Hole",
-      "Hole",
-      "Hole",
       "Hole",
       "Wall"
     ],
     [
       "Wall",
-      "Exit",
-      "Exit",
-      "Exit",
-      "Exit",
+      "Floor",
+      "Hole",
+      "Hole",
+      "Wall",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Floor",
+      "Hole",
+      "Hole",
+      "Wall",
       "Wall"
     ],
     [
@@ -69,7 +37,31 @@
       "Floor",
       "Floor",
       "Floor",
+      "Hole",
+      "Wall"
+    ],
+    [
+      "Wall",
       "Floor",
+      "Floor",
+      "Floor",
+      "Hole",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Floor",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Exit",
+      "Wall",
+      "Wall",
+      "Wall",
       "Wall"
     ],
     [
@@ -84,14 +76,26 @@
   "entities": [
     {
       "type": "BoxBasic",
-      "x": 3,
-      "y": 2,
+      "x": 1,
+      "y": 1,
+      "orientation": "N"
+    },
+    {
+      "type": "BoxBasic",
+      "x": 1,
+      "y": 4,
+      "orientation": "N"
+    },
+    {
+      "type": "BoxBasic",
+      "x": 1,
+      "y": 5,
       "orientation": "N"
     },
     {
       "type": "PlayerSpawn",
-      "x": 2,
-      "y": 2
+      "x": 1,
+      "y": 3
     }
   ]
 }
