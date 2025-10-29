@@ -605,10 +605,44 @@
     });
     document.getElementById('export-btn').onclick = ()=>{
       if (!sid) return;
-      const name = (document.getElementById('export-name').value || 'level.json').trim();
+      const name = (document.getElementById('export-name').value || 'level.dto-v2.json').trim();
       const dto = ex.getState(sid);
-      exportLevel(dtoToLevel(dto), name);
+      const out = buildDtoV2(dto);
+      exportLevel(out, name);
     };
+    function buildDtoV2(dto){
+      // Pull catalogs from engine; fall back gracefully
+      const tiles = (ex.getTiles && ex.getTiles()) || [];
+      const ents  = (ex.getEntities && ex.getEntities()) || [];
+
+      // Make code tables: numeric id -> stable slug (namespace + normalized name)
+      const code = s => String(s == null ? "" : s);
+      const slugify = name => ("core:" + String(name||"").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g,""));
+
+      const tileCodes = {};
+      for (const t of tiles) tileCodes[code(t.id)] = slugify(t.name);
+
+      const entityCodes = {};
+      for (const e of ents) entityCodes[code(e.id)] = slugify(e.name);
+
+      // Entities: keep ids/rot as-is; include player separately
+      const entities = [];
+      for (const e of dto.entities||[]) {
+        entities.push({ id:e.id|0, type:e.type|0, x:e.x|0, y:e.y|0, rot:(e.rot|0) });
+      }
+      const player = { x: dto.player?.x|0, y: dto.player?.y|0 };
+
+      return {
+        format: { kind: "dto-v2", version: "1.0" },
+        w: dto.w|0,
+        h: dto.h|0,
+        tileCodes,                           // "0":"core:floor", "1":"core:wall", ...
+        tiles: Array.from(dto.tiles||[]),    // length w*h
+        entityCodes,                         // "2":"core:box_heavy", etc.
+        entities,
+        player
+      };
+    }
 
     // Convert DrawDto back to Loader JSON (simple mapping; adjust if needed)
     function dtoToLevel(dto){

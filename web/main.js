@@ -398,6 +398,78 @@ document.querySelectorAll(".tile-toggle[data-target]").forEach((btn) => {
   });
 });
 
+// --- Authoring export (words, not numbers) ---
+function buildAuthoringLevel(dto, tileIdToName, entIdToName) {
+  const w = dto.w | 0,
+    h = dto.h | 0;
+
+  // tileGrid with string names
+  const tileGrid = Array.from({ length: h }, (_, y) => {
+    const row = new Array(w);
+    for (let x = 0; x < w; x++) {
+      const id = dto.tiles[y * w + x] | 0;
+      row[x] = tileIdToName[id] || "Floor"; // names the C# loader understands
+    }
+    return row;
+  });
+
+  // entities with string types
+  const entities = [];
+  for (const e of dto.entities || []) {
+    if (!e) continue;
+    const name = entIdToName[e.type];
+    if (!name) continue;
+    const out = { type: name, x: e.x | 0, y: e.y | 0 };
+    if (Number.isInteger(e.rot)) {
+      const rotNames = ["N", "E", "S", "W"];
+      out.orientation = rotNames[(e.rot | 0) & 3];
+    }
+    entities.push(out);
+  }
+
+  // also emit PlayerSpawn from dto.player
+  if (
+    dto.player &&
+    Number.isInteger(dto.player.x) &&
+    Number.isInteger(dto.player.y)
+  ) {
+    entities.push({
+      type: "PlayerSpawn",
+      x: dto.player.x | 0,
+      y: dto.player.y | 0,
+    });
+  }
+
+  // authoring shape the Loader already supports
+  return { tileGrid, entities };
+}
+
+// --- Import normalizer ---
+// If the file is already authoring (tileGrid of words), pass through.
+// If it's numeric (w/h/tiles) with ids, convert to words on the fly.
+function normalizeImported(json, idsToNames) {
+  if (json && Array.isArray(json.tileGrid)) return json; // already words
+  if (
+    json &&
+    Number.isInteger(json.w) &&
+    Number.isInteger(json.h) &&
+    Array.isArray(json.tiles)
+  ) {
+    // Make a minimal dto-lookalike to reuse the builder
+    const dto = {
+      w: json.w | 0,
+      h: json.h | 0,
+      tiles: Array.from(json.tiles || []),
+      entities: Array.from(json.entities || []),
+      player: json.player
+        ? { x: json.player.x | 0, y: json.player.y | 0 }
+        : undefined,
+    };
+    return buildAuthoringLevel(dto, idsToNames.tile, idsToNames.entity);
+  }
+  return json; // unknown shapes go through; Loader will error with a clear message
+}
+
 // Helper: detect if any menu/panel is open to pause game input
 function isAnyMenuOpen() {
   // Auto/Solver panels
@@ -659,15 +731,28 @@ setupHUD({
     );
     api.setState(obj);
     clearGameStatus();
-    requestRedraw();
-  },
-  onExport: (name) => exportLevel(api.getState(), name || "level.json"),
-  onImport: async (file) => {
-    const obj = await importLevel(file);
-    api.setState(obj);
     clearGameStatus();
     requestRedraw();
   },
+  onExport: (name) => {
+    const dto = api.getState(); // DrawDto with numeric ids
+    const out = buildAuthoringLevel(dto, tileIdToName, entIdToName);
+    exportLevel(out, (name || "level.authoring.json").trim());
+  },
+
+  onImport: async (file) => {
+    const obj = await importLevel(file); // JSON parsed from file
+    const normalized = normalizeImported(obj, {
+      // ensure authoring shape
+      tile: tileIdToName,
+      entity: entIdToName,
+    });
+    api.setState(normalized); // Loader.cs accepts tileGrid + names
+    api.commitBaseline && api.commitBaseline();
+    clearGameStatus();
+    requestRedraw();
+  },
+
   onRunSolver: async ({ maxDepth, maxNodes, onProgress, onSolutions }) => {
     try {
       console.debug && console.debug("[main] onRunSolver start");
@@ -947,6 +1032,49 @@ export default api;
     if (refreshBtn) refreshBtn.click();
   } catch {}
 })();
+function buildDtoV2(dto) {
+  // Prefer catalogs from engine if available
+  const tiles =
+    (typeof ex !== "undefined" && ex.getTiles ? ex.getTiles() : []) || [];
+  const ents =
+    (typeof ex !== "undefined" && ex.getEntities ? ex.getEntities() : []) || [];
+
+  // id -> stable code slug
+  const toSlug = (s) =>
+    "core:" +
+    String(s ?? "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+
+  const tileCodes = {};
+  for (const t of tiles) {
+    if (t && Number.isInteger(t.id)) tileCodes[String(t.id)] = toSlug(t.name);
+  }
+
+  const entityCodes = {};
+  for (const e of ents) {
+    if (e && Number.isInteger(e.id)) entityCodes[String(e.id)] = toSlug(e.name);
+  }
+
+  return {
+    format: { kind: "dto-v2", version: "1.0" },
+    w: dto.w | 0,
+    h: dto.h | 0,
+    tileCodes, // e.g. { "0":"core:floor", "1":"core:wall", ... }
+    tiles: Array.from(dto.tiles || []), // length = w*h, numeric ids
+    entityCodes, // e.g. { "2":"core:box_heavy", ... }
+    entities: Array.from(dto.entities || []).map((e) => ({
+      id: e.id | 0,
+      type: e.type | 0,
+      x: e.x | 0,
+      y: e.y | 0,
+      rot: e.rot | 0,
+    })),
+    player: { x: dto.player?.x | 0, y: dto.player?.y | 0 },
+  };
+}
+
 // Convert the current DrawDto (api.getState) to Loader LevelDTO schema
 function toLevelDTO(draw) {
   const w = draw.w | 0,

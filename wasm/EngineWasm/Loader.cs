@@ -5,6 +5,10 @@ using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using System.Linq;
+using System.Text.RegularExpressions;
+using Newtonsoft.Json.Linq;
+
 
 namespace SlimeGrid.Logic
 {
@@ -14,6 +18,28 @@ namespace SlimeGrid.Logic
 
         public static GameState FromJson(string json)
         {
+            // Detect dto-v2 first (format.kind == "dto-v2" or shape with w/h/tileCodes/tiles)
+            try
+            {
+                var root = JObject.Parse(json);
+                var kind = (string?)root["format"]?["kind"];
+                bool looksDtoV2 =
+                    string.Equals(kind, "dto-v2", StringComparison.OrdinalIgnoreCase) ||
+                    (root["w"] is JToken && root["h"] is JToken && root["tileCodes"] is JObject && root["tiles"] is JArray);
+
+                if (looksDtoV2)
+                {
+                    var dto2 = root.ToObject<LevelDtoV2>();
+                    if (dto2 == null) throw new Exception("dto-v2 parse failed.");
+                    return FromDtoV2(dto2);
+                }
+            }
+            catch
+            {
+                // fall through to authoring formats
+            }
+
+            // Fallback: current authoring DTOs (tileGrid / tileCharGrid / legacy tiles list)
             var settings = new JsonSerializerSettings
             {
                 Converters = { new StringEnumConverter() },
@@ -21,8 +47,104 @@ namespace SlimeGrid.Logic
                 NullValueHandling = NullValueHandling.Ignore
             };
             var dto = JsonConvert.DeserializeObject<LevelDTO>(json, settings);
-            if (dto == null) throw new System.Exception("Level JSON was null/invalid.");
+            if (dto == null) throw new Exception("Level JSON was null/invalid.");
             return FromDTO(dto);
+        }
+
+        public static GameState FromDtoV2(LevelDtoV2 dto)
+        {
+            if (dto == null) throw new Exception("dto-v2 is null.");
+            if (dto.w <= 0 || dto.h <= 0) throw new Exception("dto-v2 w/h must be > 0.");
+            if (dto.tiles == null || dto.tiles.Length != dto.w * dto.h)
+                throw new Exception("dto-v2 tiles length must equal w*h.");
+
+            // 1) Allocate state & prefill as Floor (explicit default)
+            var s = new GameState
+            {
+                Grid = new Grid2D(dto.w, dto.h),
+                PlayerPos = new V2(0, 0),
+                AnyButtonPressed = false,
+                LastAnyButtonPressed = false
+            };
+
+            for (int y = 0; y < s.Grid.H; y++)
+                for (int x = 0; x < s.Grid.W; x++)
+                {
+                    var p = new V2(x, y);
+                    var cell = new Cell
+                    {
+                        Type = TileType.Floor,
+                        Orientation = Orientation.N,
+                        Toggled = false
+                    };
+                    ApplyRecipeToCell(ref cell, TileTraits.For(TileType.Floor));
+                    s.Grid.SetCell(p, cell);
+                }
+
+            // 2) Build code -> TileType mapping using slugs (robust to renames)
+            var tileCodeToType = new Dictionary<int, TileType>();
+            foreach (var kv in dto.tileCodes ?? Enumerable.Empty<KeyValuePair<string, string>>())
+            {
+                if (!int.TryParse(kv.Key, out var code)) continue;
+                if (TryMapSlugToEnum<TileType>(kv.Value, out var ttype))
+                    tileCodeToType[code] = ttype;
+            }
+
+            // 3) Apply tiles
+            for (int y = 0; y < dto.h; y++)
+            {
+                for (int x = 0; x < dto.w; x++)
+                {
+                    int code = dto.tiles[y * dto.w + x];
+                    var p = new V2(x, y);
+
+                    // Unknown codes default to Floor (non-fatal)
+                    if (!tileCodeToType.TryGetValue(code, out var ttype))
+                        ttype = TileType.Floor;
+
+                    var cell = s.Grid.CellRef(p);
+                    cell.Type = ttype;
+                    ApplyRecipeToCell(ref cell, TileTraits.For(ttype));
+                    s.Grid.CellRef(p) = cell;
+                }
+            }
+
+            // 4) Player position (optional)
+            if (dto.player != null)
+            {
+                s.PlayerPos = new V2(dto.player.x, dto.player.y);
+            }
+
+            // 5) Entities
+            var entCodeToType = new Dictionary<int, EntityType>();
+            foreach (var kv in dto.entityCodes ?? Enumerable.Empty<KeyValuePair<string, string>>())
+            {
+                if (!int.TryParse(kv.Key, out var code)) continue;
+                if (TryMapSlugToEnum<EntityType>(kv.Value, out var etype))
+                    entCodeToType[code] = etype;
+            }
+
+            if (dto.entities != null)
+            {
+                foreach (var e in dto.entities)
+                {
+                    if (!entCodeToType.TryGetValue(e.type, out var etype))
+                        continue; // unknown entity types are ignored gracefully
+
+                    if (etype == EntityType.PlayerSpawn)
+                    {
+                        s.PlayerPos = new V2(e.x, e.y);
+                        continue;
+                    }
+
+                    var ent = EntityCatalog.Spawn(s, etype, new V2(e.x, e.y));
+
+                    if (e.rot.HasValue)
+                        ent.Orientation = RotIntToOrientation(e.rot.Value);
+                }
+            }
+
+            return s;
         }
 
         public static GameState FromDTO(LevelDTO dto)
@@ -207,9 +329,82 @@ namespace SlimeGrid.Logic
                 cell.ToggleMask = cell.ActiveMask ^ cell.InactiveMask.Value;
             }
         }
+        // ---------- dto-v2 helpers ----------
+
+        static string NormalizeKey(string s) =>
+            Regex.Replace(s ?? "", "[^a-zA-Z0-9]", "").ToLowerInvariant();
+
+        static bool TryMapSlugToEnum<TEnum>(string slug, out TEnum value) where TEnum : struct, Enum
+        {
+            string whole = NormalizeKey(slug);
+            // tail after last :, / or .
+            var m = Regex.Match(slug ?? "", @"[^:\/\.]+$");
+            string tail = NormalizeKey(m.Success ? m.Value : slug);
+
+            foreach (var name in Enum.GetNames(typeof(TEnum)))
+            {
+                var ek = NormalizeKey(name);
+                if ((ek == whole || ek == tail) && Enum.TryParse(name, true, out value))
+                    return true;
+            }
+            value = default;
+            return false;
+        }
+
+
+        static Orientation RotIntToOrientation(int rot0to3)
+        {
+            var r = (rot0to3 & 3);
+            return r switch
+            {
+                0 => Orientation.N,
+                1 => Orientation.E,
+                2 => Orientation.S,
+                _ => Orientation.W
+            };
+        }
+
     }
 
+
     // --------- JSON DTOs (authoring schema) ----------------------------------
+    // ---------- dto-v2 schema (runtime, self-describing) ----------
+
+    public sealed class LevelDtoV2
+    {
+        public FormatTag format { get; set; } = new();          // { kind:"dto-v2", version:"1.0" } (optional but recommended)
+        public int w { get; set; }
+        public int h { get; set; }
+
+        public Dictionary<string, string> tileCodes { get; set; } = new();  // code(string) -> slug ("core:floor")
+        public int[] tiles { get; set; } = Array.Empty<int>();               // length == w*h
+
+        public Dictionary<string, string> entityCodes { get; set; } = new(); // code(string) -> slug ("core:box")
+        public List<EntityDtoV2> entities { get; set; } = new();
+
+        public PlayerDtoV2 player { get; set; } // optional
+    }
+
+    public sealed class FormatTag
+    {
+        public string kind { get; set; } = "";
+        public string version { get; set; } = "1.0";
+    }
+
+    public sealed class EntityDtoV2
+    {
+        public int id { get; set; }
+        public int type { get; set; }  // code that maps via entityCodes
+        public int x { get; set; }
+        public int y { get; set; }
+        public int? rot { get; set; }  // 0..3 (N,E,S,W)
+    }
+
+    public sealed class PlayerDtoV2
+    {
+        public int x { get; set; }
+        public int y { get; set; }
+    }
 
     // Top-level level data
     public sealed class LevelDTO
