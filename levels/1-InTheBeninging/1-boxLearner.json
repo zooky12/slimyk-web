@@ -1,107 +1,97 @@
 {
-  "size": {
-    "rows": 10,
-    "cols": 6
-  },
-  "base": [
+  "tileGrid": [
     [
-      "wall",
-      "wall",
-      "wall",
-      "wall",
-      "wall",
-      "wall"
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall"
     ],
     [
-      "wall",
-      "floor",
-      "floor",
-      "floor",
-      "floor",
-      "wall"
+      "Wall",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Wall"
     ],
     [
-      "wall",
-      "floor",
-      "floor",
-      "floor",
-      "floor",
-      "wall"
+      "Wall",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Wall"
     ],
     [
-      "wall",
-      "floor",
-      "floor",
-      "floor",
-      "floor",
-      "wall"
+      "Wall",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Wall"
     ],
     [
-      "wall",
-      "floor",
-      "floor",
-      "floor",
-      "floor",
-      "wall"
+      "Wall",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Wall"
     ],
     [
-      "wall",
-      "wall",
-      "wall",
-      "wall",
-      "floor",
-      "wall"
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Floor",
+      "Wall"
     ],
     [
-      "wall",
-      "hole",
-      "hole",
-      "hole",
-      "hole",
-      "wall"
+      "Wall",
+      "Hole",
+      "Hole",
+      "Hole",
+      "Hole",
+      "Wall"
     ],
     [
-      "wall",
-      "floor",
-      "floor",
-      "floor",
-      "floor",
-      "wall"
+      "Wall",
+      "Exit",
+      "Exit",
+      "Exit",
+      "Exit",
+      "Wall"
     ],
     [
-      "wall",
-      "exit",
-      "exit",
-      "exit",
-      "exit",
-      "wall"
+      "Wall",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Wall"
     ],
     [
-      "wall",
-      "wall",
-      "wall",
-      "wall",
-      "wall",
-      "wall"
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall"
     ]
   ],
   "entities": [
     {
-      "type": "box",
+      "type": "BoxBasic",
       "x": 3,
-      "y": 2
+      "y": 2,
+      "orientation": "N"
     },
     {
-      "type": "player",
+      "type": "PlayerSpawn",
       "x": 2,
-      "y": 2,
-      "state": {
-        "mode": "free",
-        "entryDir": {
-          "dx": 0,
-          "dy": 0
-        }
-      }
+      "y": 2
     }
   ]
 }

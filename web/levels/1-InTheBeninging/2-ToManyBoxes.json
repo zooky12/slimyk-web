@@ -6,26 +6,14 @@
       "Wall",
       "Wall",
       "Wall",
+      "Wall",
+      "Wall",
       "Wall"
     ],
     [
       "Wall",
       "Floor",
       "Floor",
-      "Floor",
-      "Floor",
-      "Wall"
-    ],
-    [
-      "Wall",
-      "Floor",
-      "Floor",
-      "Floor",
-      "Floor",
-      "Wall"
-    ],
-    [
-      "Wall",
       "Floor",
       "Floor",
       "Floor",
@@ -38,13 +26,27 @@
       "Floor",
       "Floor",
       "Floor",
+      "Floor",
+      "Floor",
       "Wall"
     ],
     [
       "Wall",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Wall"
+    ],
+    [
       "Wall",
-      "Wall",
-      "Wall",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Floor",
       "Floor",
       "Wall"
     ],
@@ -52,27 +54,45 @@
       "Wall",
       "Hole",
       "Hole",
-      "Hole",
-      "Hole",
-      "Wall"
-    ],
-    [
       "Wall",
-      "Exit",
-      "Exit",
-      "Exit",
-      "Exit",
+      "Wall",
+      "Wall",
+      "Wall",
       "Wall"
     ],
     [
       "Wall",
       "Floor",
       "Floor",
+      "Hole",
+      "Floor",
       "Floor",
       "Floor",
       "Wall"
     ],
     [
+      "Wall",
+      "Floor",
+      "Floor",
+      "Hole",
+      "Floor",
+      "Exit",
+      "Floor",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Floor",
+      "Floor",
+      "Hole",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Wall",
       "Wall",
       "Wall",
       "Wall",
@@ -84,14 +104,44 @@
   "entities": [
     {
       "type": "BoxBasic",
+      "x": 5,
+      "y": 4,
+      "orientation": "N"
+    },
+    {
+      "type": "BoxBasic",
+      "x": 1,
+      "y": 7,
+      "orientation": "N"
+    },
+    {
+      "type": "BoxBasic",
+      "x": 2,
+      "y": 8,
+      "orientation": "N"
+    },
+    {
+      "type": "BoxBasic",
+      "x": 4,
+      "y": 3,
+      "orientation": "N"
+    },
+    {
+      "type": "BoxBasic",
       "x": 3,
       "y": 2,
       "orientation": "N"
     },
     {
-      "type": "PlayerSpawn",
+      "type": "BoxBasic",
       "x": 2,
-      "y": 2
+      "y": 1,
+      "orientation": "N"
+    },
+    {
+      "type": "PlayerSpawn",
+      "x": 5,
+      "y": 1
     }
   ]
 }

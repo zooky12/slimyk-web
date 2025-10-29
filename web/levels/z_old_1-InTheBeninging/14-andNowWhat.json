@@ -1,0 +1,178 @@
+{
+  "size": {
+    "rows": 11,
+    "cols": 11
+  },
+  "base": [
+    [
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall"
+    ],
+    [
+      "wall",
+      "hole",
+      "hole",
+      "hole",
+      "hole",
+      "hole",
+      "hole",
+      "hole",
+      "hole",
+      "hole",
+      "wall"
+    ],
+    [
+      "wall",
+      "hole",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "floor",
+      "hole",
+      "wall"
+    ],
+    [
+      "wall",
+      "hole",
+      "floor",
+      "hole",
+      "wall",
+      "exit",
+      "wall",
+      "hole",
+      "floor",
+      "hole",
+      "wall"
+    ],
+    [
+      "wall",
+      "hole",
+      "floor",
+      "hole",
+      "floor",
+      "floor",
+      "floor",
+      "hole",
+      "floor",
+      "hole",
+      "wall"
+    ],
+    [
+      "wall",
+      "hole",
+      "floor",
+      "hole",
+      "floor",
+      "hole",
+      "floor",
+      "hole",
+      "floor",
+      "hole",
+      "wall"
+    ],
+    [
+      "wall",
+      "hole",
+      "floor",
+      "hole",
+      "floor",
+      "hole",
+      "floor",
+      "hole",
+      "floor",
+      "hole",
+      "wall"
+    ],
+    [
+      "wall",
+      "hole",
+      "floor",
+      "hole",
+      "floor",
+      "hole",
+      "floor",
+      "hole",
+      "floor",
+      "hole",
+      "wall"
+    ],
+    [
+      "wall",
+      "wall",
+      "floor",
+      "hole",
+      "floor",
+      "floor",
+      "floor",
+      "hole",
+      "floor",
+      "hole",
+      "wall"
+    ],
+    [
+      "wall",
+      "hole",
+      "hole",
+      "hole",
+      "hole",
+      "hole",
+      "hole",
+      "hole",
+      "hole",
+      "hole",
+      "wall"
+    ],
+    [
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall",
+      "wall"
+    ]
+  ],
+  "entities": [
+    {
+      "type": "box",
+      "x": 8,
+      "y": 8
+    },
+    {
+      "type": "box",
+      "x": 5,
+      "y": 4
+    },
+    {
+      "type": "box",
+      "x": 2,
+      "y": 4
+    },
+    {
+      "type": "player",
+      "x": 5,
+      "y": 8,
+      "state": {
+        "mode": "free",
+        "x": 5,
+        "y": 8
+      }
+    }
+  ]
+}
