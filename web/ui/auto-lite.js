@@ -59,6 +59,41 @@ export function setupAutoLiteUI(api) {
       btn.setAttribute("aria-pressed", on ? "true" : "false");
     });
   }
+  function createChipRow(kind, name, label, defaults) {
+    const row = document.createElement("div");
+    row.className = "chip-row";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "tile-chip";
+    if (kind === 'tile') btn.dataset.tile = name; else btn.dataset.entity = name;
+    btn.setAttribute("aria-pressed", "false");
+    btn.textContent = label;
+    const min = document.createElement("input");
+    min.type = "number";
+    min.placeholder = "min -1";
+    min.title = "Min count (-1 = no limit)";
+    min.className = "count-input min";
+    min.dataset.kind = kind;
+    min.dataset.name = name;
+    min.style.width = "60px";
+    const max = document.createElement("input");
+    max.type = "number";
+    max.placeholder = "max -1";
+    max.title = "Max count (-1 = no limit)";
+    max.className = "count-input max";
+    max.dataset.kind = kind;
+    max.dataset.name = name;
+    max.style.width = "60px";
+    // Defaults: -1 means unused; keep existing safe defaults for Exit/PlayerSpawn
+    const dmin = (defaults && Number.isFinite(defaults.min)) ? Number(defaults.min) : -1;
+    const dmax = (defaults && Number.isFinite(defaults.max)) ? Number(defaults.max) : -1;
+    min.value = String(dmin);
+    max.value = String(dmax);
+    row.appendChild(btn);
+    row.appendChild(min);
+    row.appendChild(max);
+    return row;
+  }
   // (legacy scoring/helpers removed; C# context owns scoring and filtering)
   function unpackMovesPacked(bytes, length) {
     const dirToChar = ["w", "d", "s", "a"]; // N,E,S,W
@@ -83,6 +118,54 @@ export function setupAutoLiteUI(api) {
       out.push(dirToChar[mv] || "");
     }
     return out.join("");
+  }
+
+  // Cache shortest-solution move strings per base level (keyed by JSON signature)
+  const baseSolutionCache = new Map();
+
+  function levelKey(dto){
+    try {
+      // Stable-ish signature for caching; compact to reduce memory
+      const ents = Array.from(dto.entities || [])
+        .map(e => `${e.type}@${e.x},${e.y}${e.orientation?`:${e.orientation}`:``}`)
+        .sort();
+      return JSON.stringify({ w:dto.width|0, h:dto.height|0, t:dto.tileGrid, e:ents });
+    } catch { return JSON.stringify(dto || {}); }
+  }
+
+  async function getShortestMovesForBase(baseDto, solverCfg){
+    const key = levelKey(baseDto);
+    if (baseSolutionCache.has(key)) return baseSolutionCache.get(key);
+    try {
+      const rep = await api.solverAnalyze(baseDto, solverCfg);
+      const top = rep && rep.topSolutions && rep.topSolutions[0];
+      if (!top || !top.length || !top.movesPacked){ baseSolutionCache.set(key, null); return null; }
+      const moves = unpackMovesPacked(top.movesPacked, top.length);
+      baseSolutionCache.set(key, moves);
+      return moves;
+    } catch {
+      baseSolutionCache.set(key, null);
+      return null;
+    }
+  }
+
+  async function sequenceSolvesLevel(levelDto, movesStr){
+    if (!movesStr || !movesStr.length) return false;
+    try {
+      // Create an isolated session for fast simulation
+      const sid = api.initLevel(levelDto);
+      const charToDir = { w:0, d:1, s:2, a:3 };
+      for (let i = 0; i < movesStr.length; i++){
+        const c = movesStr[i];
+        const dir = charToDir[c];
+        if (dir == null) continue;
+        const r = api.stepAndState(sid, dir);
+        const step = r && r.step;
+        if (step && step.win) return true; // solved by prefix of base solution
+        if (step && step.lose) return false; // dead early => can't be same solution
+      }
+      return false;
+    } catch { return false; }
   }
   function catalogs() {
     const tiles = (typeof api.getTiles === "function" ? api.getTiles() : []) || [];
@@ -171,13 +254,10 @@ export function setupAutoLiteUI(api) {
       tilesChips.innerHTML = "";
       for (const t of tiles) {
         if (!t || typeof t.name !== "string") continue;
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "tile-chip";
-        btn.dataset.tile = t.name;
-        btn.setAttribute("aria-pressed", "false");
-        btn.textContent = nice(t.name);
-        tilesChips.appendChild(btn);
+        const label = nice(t.name);
+        // Default: Exit min=1 to keep solvable unless user overrides
+        const defaults = (t.name === 'Exit') ? { min: 1, max: -1 } : undefined;
+        tilesChips.appendChild(createChipRow('tile', t.name, label, defaults));
       }
       bindChipToggles(tilesChips);
     }
@@ -188,22 +268,13 @@ export function setupAutoLiteUI(api) {
       entsChips.innerHTML = "";
       for (const e of ents) {
         if (!e || typeof e.name !== "string") continue;
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "tile-chip";
-        btn.dataset.entity = e.name;
-        btn.setAttribute("aria-pressed", "false");
-        btn.textContent = nice(e.name).replace("Box Basic", "Box");
-        entsChips.appendChild(btn);
+        const label = nice(e.name).replace("Box Basic", "Box");
+        // Default: PlayerSpawn min=1 enforced unless overridden below for explicit PlayerSpawn row
+        if (e.name === 'PlayerSpawn') continue; // we'll add explicit one next
+        entsChips.appendChild(createChipRow('entity', e.name, label));
       }
       // explicit PlayerSpawn chip (movable single-spawn)
-      const ps = document.createElement("button");
-      ps.type = "button";
-      ps.className = "tile-chip";
-      ps.dataset.entity = "PlayerSpawn";
-      ps.setAttribute("aria-pressed", "false");
-      ps.textContent = "Player Spawn";
-      entsChips.appendChild(ps);
+      entsChips.appendChild(createChipRow('entity', 'PlayerSpawn', 'Player Spawn', { min: 1, max: -1 }));
       bindChipToggles(entsChips);
     }
   } catch {}
@@ -411,12 +482,39 @@ export function setupAutoLiteUI(api) {
         const entsSel = Array.from(
           document.querySelectorAll('#autoEntitiesChips .tile-chip.active') || []
         ).map(b => b.dataset.entity).filter(Boolean);
+
+        // Collect min/max counts
+        function collectCounts(rootSelector, kind, specialNames){
+          const rows = document.querySelectorAll(`${rootSelector} .chip-row`) || [];
+          const out = {};
+          for (const row of rows){
+            const btn = row.querySelector('button.tile-chip');
+            if (!btn) continue;
+            const name = kind === 'tile' ? btn.dataset.tile : btn.dataset.entity;
+            if (!name) continue;
+            const minEl = row.querySelector('input.count-input.min');
+            const maxEl = row.querySelector('input.count-input.max');
+            const vmin = Number(minEl?.value ?? -1);
+            const vmax = Number(maxEl?.value ?? -1);
+            const useNullToOverride = specialNames && specialNames.has(name);
+            const minVal = (vmin >= 0) ? (vmin|0) : (useNullToOverride ? null : undefined);
+            const maxVal = (vmax >= 0) ? (vmax|0) : (useNullToOverride ? null : undefined);
+            if (minVal !== undefined || maxVal !== undefined){
+              out[name] = { min: minVal ?? null, max: maxVal ?? null };
+            }
+          }
+          return out;
+        }
+        const tileCounts = collectCounts('#autoTilesChips', 'tile', new Set(['Exit']));
+        const entityCounts = collectCounts('#autoEntitiesChips', 'entity', new Set(['PlayerSpawn']));
         const mutation = {
           stepsBase: Math.max(1, Number(document.getElementById("autoBaseChanges")?.value) || 5),
           stepsEvolve: Math.max(1, Number(document.getElementById("autoEvolveChanges")?.value) || 1),
           tilesPlace: tilesSel.length ? tilesSel : undefined,
           entitiesPlace: entsSel.length ? entsSel : undefined,
           greedyRatio: Math.max(0, Math.min(1, Number(document.getElementById('autoGreedyRatio')?.value) || 0)),
+          tileCounts: Object.keys(tileCounts).length ? tileCounts : undefined,
+          entityCounts: Object.keys(entityCounts).length ? entityCounts : undefined,
           operatorWeights: {
             replaceTile: 0.15,
             placeEntity: 0.10,
@@ -499,6 +597,19 @@ export function setupAutoLiteUI(api) {
         }
         const tMut1 = performance.now();
         const mutMs = tMut1 - tMut0;
+
+        // Fast discard: if base's shortest solution also solves the mutated level, skip insert
+        try {
+          const baseMoves = await getShortestMovesForBase(base, cfg);
+          if (baseMoves){
+            const works = await sequenceSolvesLevel(lvl, baseMoves);
+            if (works){
+              // Skip inserting this candidate as it's too similar
+              if (progressEl && (i % 3 === 0)) progressEl.textContent = `Discarded similar ${i + 1}/${attempts}`;
+              continue;
+            }
+          }
+        } catch {}
         // Insert into C# buckets
         const tIns0 = performance.now();
         if (ctxId) {
