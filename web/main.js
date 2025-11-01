@@ -581,7 +581,7 @@ setupHUD({
   },
   onNextLevel: async () => {
     try {
-      onReset();
+      clearGameStatus();
       const worldSel = document.getElementById("server-worlds");
       const levelSel = document.getElementById("server-levels");
       if (!levelSel) return;
