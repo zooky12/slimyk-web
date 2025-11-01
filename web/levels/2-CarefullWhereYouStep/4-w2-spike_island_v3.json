@@ -1,0 +1,121 @@
+{
+  "tileGrid": [
+    [
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Floor",
+      "Hole",
+      "Spike",
+      "Floor",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Floor",
+      "Wall",
+      "Floor",
+      "Floor",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Hole",
+      "Floor",
+      "Floor",
+      "Hole",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Hole",
+      "Hole",
+      "Hole",
+      "Hole",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Floor",
+      "Spike",
+      "Exit",
+      "Floor",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Hole",
+      "Wall",
+      "Hole",
+      "Hole",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall"
+    ]
+  ],
+  "entities": [
+    {
+      "type": "BoxBasic",
+      "x": 1,
+      "y": 3,
+      "orientation": "N"
+    },
+    {
+      "type": "BoxBasic",
+      "x": 1,
+      "y": 8,
+      "orientation": "N"
+    },
+    {
+      "type": "BoxBasic",
+      "x": 4,
+      "y": 1,
+      "orientation": "N"
+    },
+    {
+      "type": "BoxBasic",
+      "x": 2,
+      "y": 2,
+      "orientation": "N"
+    },
+    {
+      "type": "BoxBasic",
+      "x": 3,
+      "y": 6,
+      "orientation": "N"
+    },
+    {
+      "type": "PlayerSpawn",
+      "x": 1,
+      "y": 2
+    }
+  ]
+}

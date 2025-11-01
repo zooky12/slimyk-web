@@ -1,0 +1,95 @@
+{
+  "tileGrid": [
+    [
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "ButtonAllowExit",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Floor",
+      "Wall",
+      "Wall"
+    ],
+    [
+      "SpikeHole",
+      "Floor",
+      "Floor",
+      "Exit",
+      "Floor",
+      "ButtonAllowExit",
+      "Floor",
+      "Floor"
+    ],
+    [
+      "Wall",
+      "ButtonAllowExit",
+      "Hole",
+      "Hole",
+      "Floor",
+      "Floor",
+      "Spike",
+      "Spike"
+    ],
+    [
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Hole",
+      "Grill",
+      "Wall",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall"
+    ]
+  ],
+  "entities": [
+    {
+      "type": "BoxTriangle",
+      "x": 6,
+      "y": 2,
+      "orientation": "W"
+    },
+    {
+      "type": "BoxTriangle",
+      "x": 4,
+      "y": 3,
+      "orientation": "E"
+    },
+    {
+      "type": "BoxTipping",
+      "x": 1,
+      "y": 2,
+      "orientation": "N"
+    },
+    {
+      "type": "BoxBasic",
+      "x": 5,
+      "y": 2,
+      "orientation": "N"
+    },
+    {
+      "type": "PlayerSpawn",
+      "x": 1,
+      "y": 3
+    }
+  ]
+}

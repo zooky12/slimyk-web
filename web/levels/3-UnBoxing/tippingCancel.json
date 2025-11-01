@@ -1,0 +1,58 @@
+{
+  "tileGrid": [
+    [
+      "Wall",
+      "Wall",
+      "Grill",
+      "Floor",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Hole",
+      "Grill",
+      "Wall",
+      "Wall"
+    ],
+    [
+      "Hole",
+      "Grill",
+      "Grill",
+      "Hole",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Grill",
+      "Hole",
+      "Hole",
+      "Exit"
+    ]
+  ],
+  "entities": [
+    {
+      "type": "BoxTipping",
+      "x": 2,
+      "y": 0,
+      "orientation": "N"
+    },
+    {
+      "type": "BoxTipping",
+      "x": 2,
+      "y": 1,
+      "orientation": "N"
+    },
+    {
+      "type": "PlayerSpawn",
+      "x": 3,
+      "y": 0
+    }
+  ]
+}

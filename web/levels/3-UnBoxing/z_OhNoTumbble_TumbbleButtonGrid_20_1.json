@@ -1,0 +1,52 @@
+{
+  "tileGrid": [
+    [
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Floor",
+      "Floor",
+      "ButtonAllowExit",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Floor",
+      "Exit",
+      "Grill",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Hole",
+      "Wall",
+      "Hole",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall"
+    ]
+  ],
+  "entities": [
+    {
+      "type": "BoxTipping",
+      "x": 1,
+      "y": 1,
+      "orientation": "N"
+    },
+    {
+      "type": "PlayerSpawn",
+      "x": 1,
+      "y": 2
+    }
+  ]
+}

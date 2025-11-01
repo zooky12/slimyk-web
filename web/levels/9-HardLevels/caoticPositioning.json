@@ -1,0 +1,171 @@
+{
+  "tileGrid": [
+    [
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Wall",
+      "Floor",
+      "Hole",
+      "Floor",
+      "Grill",
+      "Floor",
+      "Hole",
+      "Floor",
+      "Hole",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Hole",
+      "Floor",
+      "Hole",
+      "Floor",
+      "Hole",
+      "Floor",
+      "Hole",
+      "Floor",
+      "Floor",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Hole",
+      "Floor",
+      "Hole",
+      "Floor",
+      "Hole",
+      "Floor",
+      "Hole",
+      "Floor",
+      "Spike",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Hole",
+      "Floor",
+      "Hole",
+      "Floor",
+      "Hole",
+      "Floor",
+      "Hole",
+      "Floor",
+      "Hole",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Hole",
+      "Floor",
+      "Hole",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Hole",
+      "Floor",
+      "ButtonAllowExit",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Wall",
+      "Floor",
+      "Wall",
+      "Wall",
+      "Exit",
+      "Wall",
+      "Wall",
+      "Floor",
+      "Wall",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Hole",
+      "Hole",
+      "Spike",
+      "Floor",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Wall",
+      "Hole",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall"
+    ]
+  ],
+  "entities": [
+    {
+      "type": "BoxBasic",
+      "x": 5,
+      "y": 5,
+      "orientation": "N"
+    },
+    {
+      "type": "BoxBasic",
+      "x": 2,
+      "y": 5,
+      "orientation": "N"
+    },
+    {
+      "type": "BoxBasic",
+      "x": 8,
+      "y": 1,
+      "orientation": "N"
+    },
+    {
+      "type": "BoxTipping",
+      "x": 9,
+      "y": 2,
+      "orientation": "N"
+    },
+    {
+      "type": "BoxTipping",
+      "x": 4,
+      "y": 5,
+      "orientation": "N"
+    },
+    {
+      "type": "PlayerSpawn",
+      "x": 6,
+      "y": 4
+    }
+  ]
+}
