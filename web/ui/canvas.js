@@ -172,6 +172,41 @@ export function draw(dto) {
       ctx.fill();
     }
   }
+
+  // --- Spike overlays above entities (draw only prongs) ---
+  try {
+    const w = dto.w | 0,
+      h = dto.h | 0;
+    const overlayCells = new Set();
+
+    for (const e of dto.entities || []) {
+      if (!e) continue;
+      const gx = e.x | 0;
+      const gy = e.y | 0;
+      if (gx >= 0 && gy >= 0 && gx < w && gy < h) overlayCells.add(gx + "," + gy);
+    }
+    if (
+      dto.player &&
+      Number.isInteger(dto.player.x) &&
+      Number.isInteger(dto.player.y)
+    ) {
+      const gx = dto.player.x | 0;
+      const gy = dto.player.y | 0;
+      if (gx >= 0 && gy >= 0 && gx < w && gy < h) overlayCells.add(gx + "," + gy);
+    }
+
+    for (const key of overlayCells) {
+      const [sxStr, syStr] = key.split(",");
+      const sx = sxStr | 0;
+      const sy = syStr | 0;
+      const tidx = dto.tiles[sy * w + sx] | 0;
+      const tname = (tileIdToName && tileIdToName.get(tidx)) || "";
+      const n = String(tname).toLowerCase();
+      if (!n || !n.includes("spike")) continue;
+      const dy = h - 1 - sy; // flip to draw-space Y
+      drawSpikeProngsOnly(sx, dy, colors.wall);
+    }
+  } catch (_) {}
 }
 // No-op animate so existing imports work (we’re not animating WASM effects here)
 export function animate(_effects) {
@@ -304,8 +339,7 @@ function drawTileByFill(x, y, fill) {
   ctx.strokeRect(x * tileSize, y * tileSize, tileSize, tileSize);
 }
 
-function drawSpikes(x, y, baseFill, spikeFill) {
-  drawTileByFill(x, y, baseFill);
+function drawSpikeProngsOnly(x, y, spikeFill) {
   const s = tileSize;
   const px = x * s,
     py = y * s;
@@ -326,6 +360,11 @@ function drawSpikes(x, y, baseFill, spikeFill) {
   tri(px + c, py + c, m);
   tri(px + m + Math.floor(s * 0.15), py + s - m - Math.floor(s * 0.15), m);
   tri(px + s - m - Math.floor(s * 0.15), py + s - m - Math.floor(s * 0.15), m);
+}
+
+function drawSpikes(x, y, baseFill, spikeFill) {
+  drawTileByFill(x, y, baseFill);
+  drawSpikeProngsOnly(x, y, spikeFill);
 }
 
 function drawGrill(x, y, baseFill, barFill) {

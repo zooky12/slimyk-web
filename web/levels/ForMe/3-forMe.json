@@ -1,0 +1,135 @@
+{
+  "tileGrid": [
+    [
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Wall",
+      "Wall",
+      "Floor",
+      "Ice",
+      "ButtonToggle",
+      "Wall",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Hole",
+      "Floor",
+      "Hole",
+      "Floor",
+      "Wall",
+      "Wall",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Hole",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Exit",
+      "Hole",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Hole",
+      "Floor",
+      "Hole",
+      "Spike",
+      "Wall",
+      "Wall",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "ButtonAllowExit",
+      "Floor",
+      "Floor",
+      "Floor",
+      "Wall",
+      "Wall",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Hole",
+      "IceSpike",
+      "Hole",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Wall",
+      "ButtonAllowExit",
+      "Floor",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Wall",
+      "Wall",
+      "Hole",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall"
+    ],
+    [
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall",
+      "Wall"
+    ]
+  ],
+  "entities": [
+    {
+      "type": "BoxTipping",
+      "x": 2,
+      "y": 3,
+      "orientation": "N"
+    },
+    {
+      "type": "BoxBasic",
+      "x": 2,
+      "y": 5,
+      "orientation": "N"
+    },
+    {
+      "type": "BoxBasic",
+      "x": 3,
+      "y": 3,
+      "orientation": "N"
+    },
+    {
+      "type": "BoxTriangle",
+      "x": 3,
+      "y": 5,
+      "orientation": "N"
+    },
+    {
+      "type": "PlayerSpawn",
+      "x": 2,
+      "y": 6
+    }
+  ]
+}
