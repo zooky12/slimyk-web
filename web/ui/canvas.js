@@ -204,7 +204,12 @@ export function draw(dto) {
       const n = String(tname).toLowerCase();
       if (!n || !n.includes("spike")) continue;
       const dy = h - 1 - sy; // flip to draw-space Y
-      drawSpikeProngsOnly(sx, dy, colors.wall);
+      // Choose overlay shape by active/inactive
+      if (n.startsWith("inactive")) {
+        drawInactiveDotsOnly(sx, dy, colors.wall);
+      } else {
+        drawSpikeProngsOnly(sx, dy, colors.wall);
+      }
     }
   } catch (_) {}
 }
@@ -367,6 +372,32 @@ function drawSpikes(x, y, baseFill, spikeFill) {
   drawSpikeProngsOnly(x, y, spikeFill);
 }
 
+function drawInactiveDotsOnly(x, y, dotFill) {
+  const s = tileSize;
+  const px = x * s,
+    py = y * s;
+  const m = Math.max(2, Math.floor(s * 0.12));
+  const c = Math.floor(s / 2);
+  const off = Math.floor(s * 0.15);
+  const r = Math.max(1, Math.floor(m * 0.5));
+  const dot = (cx, cy, rr) => {
+    ctx.fillStyle = dotFill;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  dot(px + m + off, py + m + off, r);
+  dot(px + s - m - off, py + m + off, r);
+  dot(px + c, py + c, r);
+  dot(px + m + off, py + s - m - off, r);
+  dot(px + s - m - off, py + s - m - off, r);
+}
+
+function drawInactiveSpikes(x, y, baseFill, dotFill) {
+  drawTileByFill(x, y, baseFill);
+  drawInactiveDotsOnly(x, y, dotFill);
+}
+
 function drawGrill(x, y, baseFill, barFill) {
   // Hash '#': two vertical bars + two horizontal bars (with margins)
   drawTileByFill(x, y, baseFill);
@@ -450,6 +481,14 @@ function drawTile(nameRaw, x, y) {
   if (n === "spike") return drawSpikes(x, y, colors.floor, colors.wall);
   if (n === "spikehole") return drawSpikes(x, y, colors.hole, colors.wall);
   if (n === "icespike") return drawSpikes(x, y, colors.iceBase, colors.wall);
+
+  // Inactive spike variants: same layout, circles instead of triangles
+  if (n === "inactivespike")
+    return drawInactiveSpikes(x, y, colors.floor, colors.wall);
+  if (n === "inactivespikehole")
+    return drawInactiveSpikes(x, y, colors.hole, colors.wall);
+  if (n === "inactiveicespike")
+    return drawInactiveSpikes(x, y, colors.iceBase, colors.wall);
 
   // Grill
   if (n === "grill") return drawGrill(x, y, colors.hole, colors.floor);

@@ -49,9 +49,6 @@ namespace SlimeGrid.Logic
             cell.Type = t;
             cell.Orientation = rot;
 
-            // same recipe logic as in Loader
-            var def = TileTraits.For(t);
-            ApplyRecipeToCell(ref cell, def);
             s.Grid.SetCell(p, cell);
 
             // Guards: reject turning a walkable tile into a blocker/hole under occupants
@@ -107,7 +104,6 @@ namespace SlimeGrid.Logic
             if (cell.Type != TileType.Floor)
             {
                 cell.Type = TileType.Floor; cell.Orientation = Orientation.N;
-                ApplyRecipeToCell(ref cell, TileTraits.For(TileType.Floor));
                 s.Grid.SetCell(p, cell);
                 return true;
             }
@@ -145,18 +141,6 @@ namespace SlimeGrid.Logic
         }
 
         // helpers
-        static void ApplyRecipeToCell(ref Cell cell, TT recipe)
-        {
-            cell.ActiveMask = recipe.Active;
-            cell.InactiveMask = recipe.Inactive;
-            cell.ToggleMask = cell.InactiveMask.HasValue ? (cell.ActiveMask ^ cell.InactiveMask.Value) : 0;
-            if (cell.InactiveMask.HasValue)
-            {
-                var cond = (cell.ActiveMask & (Traits.ToggleableByButton | Traits.ToggleableByEntity | Traits.ToggleableByPlayer));
-                cell.InactiveMask = cell.InactiveMask.Value | cond;
-                cell.ToggleMask = cell.ActiveMask ^ cell.InactiveMask.Value;
-            }
-            cell.Toggled = false;
-        }
+        static void ApplyRecipeToCell(ref Cell cell, TT recipe) { }
     }
 }

@@ -1,0 +1,71 @@
+*** Begin Patch
+*** Update File: web/ui/hud.js
+@@
+       (function addReplayControls(){
+@@
+         })();
++
++        // Trace Align controls: compare a move prefix against BFS visited depths
++        (function addTraceAlignControls(){
++          try {
++            const box = document.createElement('div');
++            box.className = 'solver-tools__group';
++            const label = document.createElement('div');
++            label.textContent = 'Trace align (moves ? visited depth):';
++            label.style.marginTop = '8px';
++            const input = document.createElement('input');
++            input.type = 'text';
++            input.placeholder = 'wasd...';
++            input.id = 'traceAlignMoves';
++            input.style.width = '100%';
++            input.style.margin = '6px 0';
++            const runBtn = document.createElement('button');
++            runBtn.textContent = 'Trace Align';
++            runBtn.id = 'traceAlignRun';
++            const dlBtn = document.createElement('button');
++            dlBtn.textContent = 'Download Align JSON';
++            dlBtn.id = 'traceAlignDownload';
++            dlBtn.style.marginLeft = '8px';
++            dlBtn.disabled = true;
++            const out = document.createElement('div');
++            out.id = 'traceAlignOut';
++            out.style.fontSize = '12px'; out.style.opacity = '0.9'; out.style.marginTop = '6px';
++
++            box.appendChild(label);
++            box.appendChild(input);
++            box.appendChild(runBtn);
++            box.appendChild(dlBtn);
++            box.appendChild(out);
++            solverPanel && solverPanel.appendChild(box);
++
++            let lastResult = null;
++            runBtn.addEventListener('click', async () => {
++              try {
++                const moves = String(input.value || '').trim();
++                if (!moves) { alert('Enter moves (wasd)'); return; }
++                const dto = api.getState();
++                const level = buildAuthoringLevel(dto, tileIdToName, entIdToName);
++                const cfg = { nodesCap: Number(document.getElementById('solverMaxNodes')?.value) || 200000,
++                              depthCap: Number(document.getElementById('solverMaxDepth')?.value) || 100,
++                              timeCapSeconds: 10.0, enforceTimeCap: false };
++                const json = await window.app.wasm.call('Solver_TraceAlign', JSON.stringify(level), moves, JSON.stringify(cfg));
++                lastResult = JSON.parse(json);
++                dlBtn.disabled = !lastResult || lastResult.ok !== true;
++                const fm = lastResult && lastResult.firstMissing;
++                out.textContent = (lastResult && lastResult.ok)
++                  ? (irstMissing:   (prefixes: ))
++                  : ('TraceAlign failed: ' + (lastResult?.err || 'unknown'));
++              } catch (e) {
++                lastResult = null; dlBtn.disabled = true;
++                out.textContent = 'TraceAlign error: ' + (e?.message || e);
++              }
++            });
++            dlBtn.addEventListener('click', () => {
++              if (!lastResult) return;
++              const blob = new Blob([JSON.stringify(lastResult, null, 2)], { type: 'application/json' });
++              const url = URL.createObjectURL(blob);
++              const a = document.createElement('a'); a.href = url; a.download = 'trace-align.json'; a.click(); URL.revokeObjectURL(url);
++            });
++          } catch {}
++        })();
+*** End Patch

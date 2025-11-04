@@ -128,7 +128,7 @@ namespace SlimeGrid.Tools.ALD
                         }
                         // For non-spawn entities, ensure cell is free and tile supports entities
                         var cell = seed.Grid.CellRef(new V2(x, y));
-                        var traits = cell.ActiveMask;
+                        var traits = TileTraits.For(cell.Type).Active;
                         bool blocksBox = (traits & (Traits.StopsEntity | Traits.HoleForEntity)) != 0;
                         if (blocksBox) continue;
                         if (seed.EntityAt.ContainsKey(new V2(x, y))) continue;

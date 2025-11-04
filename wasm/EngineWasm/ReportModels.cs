@@ -33,6 +33,12 @@ namespace SlimeGrid.Tools.Solver
         public double stepsInBoxTop3Avg { get; set; }
         public double stepsFreeTop3Avg { get; set; }
         public double dedupMovesLenTop3Avg { get; set; }
+
+        // Diagnostics
+        public int noOpSkips { get; set; }
+        public int keyEqNonNoop { get; set; }
+        public int visitedPrunes { get; set; } // prunes due to visited-depth
+        public int frontierAtMaxDepth { get; set; } // nodes dequeued at maxDepth
     }
 
     public sealed class CapsInfo

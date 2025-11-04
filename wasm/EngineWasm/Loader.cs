@@ -74,10 +74,8 @@ namespace SlimeGrid.Logic
                     var cell = new Cell
                     {
                         Type = TileType.Floor,
-                        Orientation = Orientation.N,
-                        Toggled = false
+                        Orientation = Orientation.N
                     };
-                    ApplyRecipeToCell(ref cell, TileTraits.For(TileType.Floor));
                     s.Grid.SetCell(p, cell);
                 }
 
@@ -104,7 +102,6 @@ namespace SlimeGrid.Logic
 
                     var cell = s.Grid.CellRef(p);
                     cell.Type = ttype;
-                    ApplyRecipeToCell(ref cell, TileTraits.For(ttype));
                     s.Grid.CellRef(p) = cell;
                 }
             }
@@ -183,10 +180,8 @@ namespace SlimeGrid.Logic
                     var cell = new Cell
                     {
                         Type = TileType.Floor,
-                        Orientation = Orientation.N,
-                        Toggled = false
+                        Orientation = Orientation.N
                     };
-                    ApplyRecipeToCell(ref cell, TileTraits.For(TileType.Floor));
                     s.Grid.SetCell(p, cell);
                 }
 
@@ -247,45 +242,8 @@ namespace SlimeGrid.Logic
                     if (!s.Grid.InBounds(p)) continue;
 
                     var cell = s.Grid.CellRef(p);
-
-                    var def = TileTraits.For(t.type);
                     cell.Type = t.type;
-                    cell.ActiveMask = def.Active;
-                    cell.InactiveMask = def.Inactive; // may be null
-
-                    // Per-instance togglers (your rule: set the condition bit on Active)
-                    if (t.toggleByButton) cell.ActiveMask |= Traits.ToggleableByButton;
-                    if (t.toggleByEntity) cell.ActiveMask |= Traits.ToggleableByEntity;
-                    if (t.toggleByPlayer) cell.ActiveMask |= Traits.ToggleableByPlayer;
-
-                    // Optional per-cell orientation
                     if (t.orientation.HasValue) cell.Orientation = t.orientation.Value;
-
-                    // Optional per-cell inactive override via composition (add/remove/xor)
-                    if (t.inactiveAdd.HasValue || t.inactiveRemove.HasValue || t.inactiveXor.HasValue)
-                    {
-                        var baseInactive = cell.InactiveMask ?? Traits.None;
-                        var inactive = baseInactive;
-                        if (t.inactiveAdd.HasValue) inactive |= t.inactiveAdd.Value;
-                        if (t.inactiveRemove.HasValue) inactive &= ~t.inactiveRemove.Value;
-                        if (t.inactiveXor.HasValue) inactive ^= t.inactiveXor.Value;
-                        cell.InactiveMask = inactive;
-                    }
-
-                    // Precompute toggle mask (parity XOR); 0 if no alternate
-                    cell.ToggleMask = cell.InactiveMask.HasValue
-                        ? (cell.ActiveMask ^ cell.InactiveMask.Value)
-                        : 0;
-
-                    // Keep ToggleableBy* bits present in both masks
-                    if (cell.InactiveMask.HasValue)
-                    {
-                        var cond = (cell.ActiveMask & (Traits.ToggleableByButton | Traits.ToggleableByEntity | Traits.ToggleableByPlayer));
-                        cell.InactiveMask = cell.InactiveMask.Value | cond;
-                        cell.ToggleMask = cell.ActiveMask ^ cell.InactiveMask.Value;
-                    }
-
-                    cell.Toggled = false;
                     s.Grid.SetCell(p, cell);
                 }
             }
@@ -316,19 +274,8 @@ namespace SlimeGrid.Logic
         }
 
         // --------- Helpers ---------------------------------------------------
-        static void ApplyRecipeToCell(ref Cell cell, TT recipe)
-        {
-            cell.ActiveMask = recipe.Active;
-            cell.InactiveMask = recipe.Inactive; // may be null
-            cell.ToggleMask = cell.InactiveMask.HasValue ? (cell.ActiveMask ^ cell.InactiveMask.Value) : 0;
-
-            if (cell.InactiveMask.HasValue)
-            {
-                var cond = (cell.ActiveMask & (Traits.ToggleableByButton | Traits.ToggleableByEntity | Traits.ToggleableByPlayer));
-                cell.InactiveMask = cell.InactiveMask.Value | cond;
-                cell.ToggleMask = cell.ActiveMask ^ cell.InactiveMask.Value;
-            }
-        }
+        // No-op in the tile-swap model (kept for source compatibility)
+        static void ApplyRecipeToCell(ref Cell cell, TT recipe) { }
         // ---------- dto-v2 helpers ----------
 
         static string NormalizeKey(string s) =>

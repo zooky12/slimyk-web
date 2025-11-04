@@ -102,6 +102,11 @@ namespace SlimeGrid.Tools.Solver
             int attachedIdx = s.AttachedEntityId.HasValue && idToIdx.TryGetValue(s.AttachedEntityId.Value, out var idx) ? idx : -1;
             Mix(ref h1, (ulong)(attachedIdx + 1)); // -1 -> 0
             Mix(ref h2, (ulong)(s.EntryDir.HasValue ? (byte)s.EntryDir.Value + 1 : 0));
+            // Include AnyButtonPressed and LastAnyButtonPressed (edge parity)
+            Mix(ref h1, s.AnyButtonPressed ? 0xCAFED00DUL : 0xD00DFACEUL);
+            Mix(ref h2, s.AnyButtonPressed ? 0x0BADC0DEUL : 0xDEADC0DEUL);
+            Mix(ref h1, s.LastAnyButtonPressed ? 0xABCDEF01UL : 0x10FEDCBAUL);
+            Mix(ref h2, s.LastAnyButtonPressed ? 0x13579BDFUL : 0xFDB97531UL);
 
             // 3) Canonical entity list
             foreach (var e in tmp)
@@ -126,7 +131,18 @@ namespace SlimeGrid.Tools.Solver
                 Mix(ref h2, pv ^ (((ulong)(byte)tt * 0xC2B2AE3DUL) ^ ((ulong)ori * 1315423911UL)));
             }
 
-            // No full-grid signature (performance): only togglable cells are tracked above
+            // 5) Full-grid tile signature (strict) including orientation
+            for (int y = 0; y < s.Grid.H; y++)
+                for (int x = 0; x < s.Grid.W; x++)
+                {
+                    var p = new V2(x, y);
+                    ref var c = ref s.Grid.CellRef(p);
+                    var tt = c.Type;
+                    byte ori = (byte)(c.Orientation.HasValue ? ((byte)c.Orientation.Value + 1) : 0);
+                    ulong pv = ((ulong)(uint)x << 32) ^ (ulong)(uint)y;
+                    Mix(ref h1, pv ^ (((ulong)(byte)tt * 0x85EBCA6BUL) ^ (ulong)ori));
+                    Mix(ref h2, pv ^ (((ulong)(byte)tt * 0x27D4EB2FUL) ^ ((ulong)ori * 2654435761UL)));
+                }
 
             return new StateKey(h1, h2);
         }
@@ -176,31 +192,29 @@ namespace SlimeGrid.Tools.Solver
                 int attIdx = (s.AttachedEntityId.HasValue && idToIdx.TryGetValue(s.AttachedEntityId.Value, out var idx)) ? (idx + 1) : 0;
                 XorMix(ref h1, (ulong)((ed & 0xFF) | ((attIdx & 0xFFFF) << 8)));
                 XorMix(ref h2, (ulong)((attIdx & 0xFFFF) | ((ed & 0xFF) << 16)));
+                // Include AnyButtonPressed and LastAnyButtonPressed (edge parity)
+                XorMix(ref h1, s.AnyButtonPressed ? 0xCAFED00DUL : 0xD00DFACEUL);
+                XorMix(ref h2, s.AnyButtonPressed ? 0x0BADC0DEUL : 0xDEADC0DEUL);
+                XorMix(ref h1, s.LastAnyButtonPressed ? 0xABCDEF01UL : 0x10FEDCBAUL);
+                XorMix(ref h2, s.LastAnyButtonPressed ? 0x13579BDFUL : 0xFDB97531UL);
             }
 
             // Entities: canonical order + sequential mix (breaks swap invariance)
-            // Use packed, non-overlapping fields and robust mixing to avoid deterministic overlaps.
+            // Use the pre-sorted 'tmp' list so order is stable and reflects (type,pos,orientation).
             {
-                static ulong Rotl(ulong x, int k) => (x << k) | (x >> (64 - k));
-                const ulong SEED1 = 0xD1B54A32D192ED03UL;
-                const ulong SEED2 = 0x853C49E6748FEA9BUL;
-                const ulong C1 = 0x9E3779B97F4A7C15UL;
-                const ulong C2 = 0xBF58476D1CE4E5B9UL;
-                const ulong C3 = 0x94D049BB133111EBUL;
+                const ulong P1 = 1099511628211UL; // FNV prime
+                const ulong P2 = 1469598103934665603UL; // alternate prime
                 foreach (var e in tmp)
                 {
-                    // Optionally skip PlayerSpawn if ever present (player position is hashed separately)
-                    if (e.Type == EntityType.PlayerSpawn) continue;
-                    // Pack without overlap: [type:8][ori:8][x:16+][y:16+]
-                    ulong v =  (ulong)(byte)e.Type
-                              | ((ulong)(byte)e.Orientation << 8)
-                              | ((ulong)(uint)e.Pos.x       << 16)
-                              | ((ulong)(uint)e.Pos.y       << 32);
-                    // Robust two-limb cascading mix
-                    h1 ^= Mix64(v ^ SEED1);
-                    h1 = Rotl(h1, 27) * C1 + C2;
-                    h2 ^= Mix64(v ^ SEED2);
-                    h2 = Rotl(h2, 31) * C3 + C3;
+                    ulong v = 0;
+                    v ^= (ulong)(byte)e.Type;
+                    v ^= (ulong)(((uint)e.Pos.x << 16) ^ (uint)e.Pos.y);
+                    v ^= (ulong)(byte)e.Orientation << 24;
+                    // cascade mix so order matters (and is stable via canonical sort)
+                    h1 ^= Mix64(v + 0xBADC0FFEE0DDF00DUL);
+                    h1 *= P1;
+                    h2 ^= Mix64((v * 1315423911UL) + 0xC001D00DDEADBEEFUL);
+                    h2 *= P2;
                 }
             }
 
@@ -215,6 +229,17 @@ namespace SlimeGrid.Tools.Solver
                 XorMix(ref h2, pv ^ (((ulong)(byte)tt * 0xA0761D64UL) ^ ((ulong)ori * 11400714819323198485UL)));
             }
 
+            // Full-grid tile signature (strict) including orientation — ensures no pad-dependent merges
+            for (int y = 0; y < s.Grid.H; y++)
+                for (int x = 0; x < s.Grid.W; x++)
+                {
+                    ref var c = ref s.Grid.CellRef(new V2(x, y));
+                    var tt = c.Type;
+                    byte ori = (byte)(c.Orientation.HasValue ? ((byte)c.Orientation.Value + 1) : 0);
+                    ulong pv = ((ulong)(uint)x << 32) ^ (ulong)(uint)y;
+                    XorMix(ref h1, pv ^ (((ulong)(byte)tt * 0x9E3779B1UL) ^ (ulong)ori));
+                    XorMix(ref h2, pv ^ (((ulong)(byte)tt * 0xC2B2AE3DUL) ^ ((ulong)ori * 1315423911UL)));
+                }
 
             return new StateKey(h1, h2);
         }

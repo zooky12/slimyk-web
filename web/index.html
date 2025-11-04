@@ -238,11 +238,13 @@
             <button id="toggleSolver" aria-pressed="false">Show Solver</button>
           </div>
           <div id="solverPanel" class="hidden" aria-hidden="true">
-            <div class="solver-grid">
-              <label>Max depth <input id="solverMaxDepth" type="number" value="100" min="1"></label>
-              <label>Max nodes <input id="solverMaxNodes" type="number" value="200000" min="100"></label>
-              <label>Max solutions <input id="solverMaxSolutions" type="number" value="50" min="1"></label>
-            </div>
+              <div class="solver-grid">
+                <label>Max depth <input id="solverMaxDepth" type="number" value="100" min="1"></label>
+                <label>Max nodes <input id="solverMaxNodes" type="number" value="200000" min="100"></label>
+                <label>Max solutions <input id="solverMaxSolutions" type="number" value="50" min="1"></label>
+                <label><input id="solverDisableVisited" type="checkbox"> Disable visited pruning</label>
+                <label><input id="solverUseBfs" type="checkbox" checked> Use BFS (unchecked = DFS)</label>
+              </div>
             <div class="solver-actions">
               <button id="runSolver">Run Solver</button>
               <button id="stopSolver" disabled>Stop</button>

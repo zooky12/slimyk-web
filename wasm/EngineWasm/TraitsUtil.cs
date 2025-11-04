@@ -4,26 +4,17 @@ namespace SlimeGrid.Logic
 {
     public static class TraitsUtil
     {
-        /// Tile-only mask (no entity OR), with stateless parity-XOR applied.
+        // Tile-only mask (no entity OR), derived from the current tile type.
         public static Traits ResolveTileMask(GameState s, V2 p)
         {
             if (!s.Grid.InBounds(p))
                 return Traits.StopsPlayer | Traits.StopsEntity | Traits.StopsFlight;
 
             ref var cell = ref s.Grid.CellRef(p);
-            Traits m = cell.ActiveMask;
-
-            if (cell.ToggleMask != 0)
-            {
-                if ((m & Traits.ToggleableByButton) != 0 && s.AnyButtonPressed) m ^= cell.ToggleMask;
-                if ((m & Traits.ToggleableByEntity) != 0 && s.EntityAt.ContainsKey(p)) m ^= cell.ToggleMask;
-                if ((m & Traits.ToggleableByPlayer) != 0 && p.Equals(s.PlayerPos)) m ^= cell.ToggleMask;
-            }
-            return m;
+            return TileTraits.For(cell.Type).Active;
         }
 
-        /// Full effective mask = tile (after toggles) OR entity traits (if present).
-        /// Use this only when entity traits should also block (e.g., StopsPlayer from an entity).
+        // Full effective mask = tile traits OR entity traits (if present).
         public static Traits ResolveEffectiveMask(GameState s, V2 p)
         {
             var m = ResolveTileMask(s, p);
@@ -32,7 +23,7 @@ namespace SlimeGrid.Logic
             return m;
         }
 
-        // Convenience tests (keep the precedence “stop > stick > pass” in mind at call sites)
+        // Convenience tests
         public static bool TileStopsPlayer(GameState s, V2 p) => (ResolveEffectiveMask(s, p) & Traits.StopsPlayer) != 0;
         public static bool TileStopsEntity(GameState s, V2 p) => (ResolveEffectiveMask(s, p) & Traits.StopsEntity) != 0;
         public static bool TileSticksEntity(GameState s, V2 p) => (ResolveEffectiveMask(s, p) & Traits.SticksEntity) != 0;
@@ -42,3 +33,4 @@ namespace SlimeGrid.Logic
         public static bool TileIsSlippery(GameState s, V2 p) => (ResolveEffectiveMask(s, p) & Traits.Slipery) != 0;
     }
 }
+

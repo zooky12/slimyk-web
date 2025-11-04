@@ -121,6 +121,11 @@ namespace SlimeGrid.Logic
         ButtonRotateCW = 1UL << 30, // button that rotates CW while pressed
         ButtonRotateCCW = 1UL << 31, // button that rotates CCW while pressed
 
+        // New: untoggleable counterparts (swap back on release/leave)
+        UntoggleableByButton = 1UL << 32,
+        UntoggleableByEntity = 1UL << 33,
+        UntoggleableByPlayer = 1UL << 34,
+
         // Reserved (32..63)
     }
 
@@ -129,10 +134,10 @@ namespace SlimeGrid.Logic
     public enum TileType : byte
     {
         Floor = 0, Wall, Hole,
-        Spike, SpikeHole,
+        Spike, InactiveSpike, SpikeHole, InactiveSpikeHole,
         Grill,
         SlimPath, SlimPathHole,
-        Ice, IceSpike, IceGrill, IceSlimPath, IceExit,
+        Ice, IceSpike, InactiveIceSpike, IceGrill, IceSlimPath, IceExit,
         Exit,
         ButtonAllowExit, ButtonToggle
     }
@@ -154,11 +159,7 @@ namespace SlimeGrid.Logic
         // Metadata (debug/tools only)
         public TileType Type;
 
-        // Runtime truth used by logic:
-        public Traits ActiveMask;          // current live mask
-        public Traits? InactiveMask;       // null => no alternate state
-        public Traits ToggleMask; // = (InactiveMask ?? 0) ^ ActiveMask
-        public bool Toggled;               // true if tile is flipped
+        // Orientation (optional per-cell)
         public Orientation? Orientation;   // null if not oriented
     }
 }

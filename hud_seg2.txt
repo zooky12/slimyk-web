@@ -1,0 +1,141 @@
+                  const a = document.createElement('a');
+                  a.href = url; a.download = 'solver-report.json'; a.click();
+                  URL.revokeObjectURL(url);
+                } catch {}
+              });
+              actions.appendChild(exportBtn);
+
+              row.appendChild(actions);
+              if (solutionsEl) solutionsEl.appendChild(row);
+            });
+          }
+
+          // Replay (trace) controls: allow user to paste moves and get a debug trace
+          (function addReplayControls(){
+            try {
+              const row = document.createElement('div');
+              row.className = 'solutionItem';
+              const text = document.createElement('div');
+              text.className = 'solutionText';
+              text.textContent = 'Replay moves with trace:';
+              row.appendChild(text);
+
+              const actions = document.createElement('div');
+              actions.className = 'solutionActions';
+              const input = document.createElement('input');
+              input.type = 'text';
+              input.placeholder = 'enter moves (w d s a)';
+              input.style.minWidth = '260px';
+              actions.appendChild(input);
+
+              const btn = document.createElement('button');
+              btn.textContent = 'Replay (trace)';
+              btn.addEventListener('click', async () => {
+                const moves = (input.value || '').trim();
+                if (!moves) return;
+                const lvl = (lastReport && lastReport.levelEcho) ? lastReport.levelEcho : null;
+                if (!lvl) { alert('No levelEcho available in last report. Run solver again first.'); return; }
+                try {
+                  const rep = await window.api.engineReplayMoves(lvl, moves);
+                  console.debug('[ReplayTrace]', rep);
+                  const summary = document.createElement('div');
+                  summary.className = 'solutionText';
+                  const msg = rep && rep.ok ? (rep.win ? `Win at step ${rep.at}` : 'OK') : (rep && rep.blocked ? `Blocked at step ${rep.at} on ${rep.dir}` : `Stopped: ${rep?.reason||'unknown'}`);
+                  summary.textContent = `Trace: ${msg}`;
+
+                  const dlBtn = document.createElement('button');
+                  dlBtn.textContent = 'Download Trace';
+                  dlBtn.addEventListener('click', () => {
+                    try {
+                      const blob = new Blob([JSON.stringify(rep, null, 2)], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url; a.download = 'replay-trace.json'; a.click();
+                      URL.revokeObjectURL(url);
+                    } catch {}
+                  });
+
+                  const out = document.createElement('div');
+                  out.className = 'solutionItem';
+                  const wrap = document.createElement('div');
+                  wrap.className = 'solutionActions';
+                  wrap.appendChild(summary);
+                  wrap.appendChild(dlBtn);
+                  out.appendChild(wrap);
+                  solutionsEl && solutionsEl.appendChild(out);
+                } catch(e) {
+                  alert('Replay failed: ' + (e?.message || e));
+                }
+              });
+              actions.appendChild(btn);
+
+              row.appendChild(actions);
+              solutionsEl && solutionsEl.appendChild(row);
+            } catch {}
+          })();
+
+          if (!solutions.length) {
+            const empty = document.createElement('div');
+            empty.className = 'solutionItem';
+            const text = document.createElement('div');
+            text.className = 'solutionText';
+            text.textContent = 'No solutions found (within current limits).';
+            empty.appendChild(text);
+
+            // Add a Download Report button so failures can be exported
+            const actions = document.createElement('div');
+            actions.className = 'solutionActions';
+            const exportBtn = document.createElement('button');
+            exportBtn.textContent = 'Download Fail Report';
+            exportBtn.title = 'Export full solver JSON report for this run';
+            exportBtn.addEventListener('click', () => {
+              if (!lastReport) return;
+              try {
+                const blob = new Blob([JSON.stringify(lastReport, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = 'solver-report.json'; a.click();
+                URL.revokeObjectURL(url);
+              } catch {}
+            });
+            actions.appendChild(exportBtn);
+
+            // DFS Fallback button
+            const dfsBtn = document.createElement('button');
+            dfsBtn.textContent = 'Run DFS Fallback';
+            dfsBtn.title = 'Try depth-first search (slower, different pruning)';
+              dfsBtn.addEventListener('click', async () => {
+                try {
+                  const maxDepth = Number(document.getElementById('solverMaxDepth').value);
+                  const maxNodes = Number(document.getElementById('solverMaxNodes').value);
+                  await onRunSolver({
+                    maxDepth,
+                    maxNodes,
+                  useBfs: false,
+                  disableVisited: true,
+                  onProgress: (t) => { if (statusEl) statusEl.textContent = t; },
+                  onSolutions: (result = {}) => {
+                    try { console.debug && console.debug('[HUD] DFS fallback result', result); } catch {}
+                    // Replace the current rendering with DFS results by simulating a run click
+                    lastReport = result.reportRaw || lastReport;
+                    const evt = new Event('click');
+                    document.getElementById('runSolver').dispatchEvent(evt);
+                  }
+                });
+              } catch (e) {
+                alert('DFS fallback failed: ' + (e?.message || e));
+              }
+            });
+            actions.appendChild(dfsBtn);
+            empty.appendChild(actions);
+
+            if (solutionsEl) solutionsEl.appendChild(empty);
+          }
+
+          if (deadEnds.length) {
+            const header = document.createElement('div');
+            header.className = 'solutionItem deadHeader';
+            const title = document.createElement('div');
+            title.className = 'solutionText';
+            title.innerHTML = `Dead ends (filtered): <b>${deadEnds.length}</b>`;
+            header.appendChild(title);

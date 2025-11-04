@@ -137,6 +137,14 @@ namespace SlimeGrid.Logic
                 if (e.Pos.x > from.x && e.Pos.x < next.x && e.Pos.y > from.y && e.Pos.y < next.y)
                     toBreak.Add(eid);
             }
+            // Deterministic removal order: sort by row-major position, then id
+            toBreak.Sort((a, b) =>
+            {
+                var pa = s.EntitiesById[a].Pos; var pb = s.EntitiesById[b].Pos;
+                int cy = pa.y.CompareTo(pb.y); if (cy != 0) return cy;
+                int cx = pa.x.CompareTo(pb.x); if (cx != 0) return cx;
+                return a.CompareTo(b);
+            });
             foreach (var eid in toBreak)
             {
                 var pos = s.EntitiesById[eid].Pos;

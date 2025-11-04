@@ -227,6 +227,9 @@ export async function initWasm(baseUrl) {
             Level_Resize: tryMethod("Level_Resize"),
             State_TraitsAt: tryMethod("State_TraitsAt"),
             Level_ApplyEdit: tryMethod("Level_ApplyEdit"),
+            // Try to bind optional diagnostics early (ok if null; ensureBound can also bind later)
+            Solver_TraceAlign: tryMethod("Solver_TraceAlign"),
+            Solver_FindPathToKey: tryMethod("Solver_FindPathToKey"),
           };
         } catch {}
       }
@@ -273,6 +276,8 @@ export async function initWasm(baseUrl) {
           // With explicit parameter signature for known methods
           const sigMap = {
             Solver_Analyze: "(System.String,System.String)",
+            Solver_TraceAlign: "(System.String,System.String,System.String)",
+            Solver_FindPathToKey: "(System.String,System.String,System.String,System.String)",
             ALD_TryMutate: "(System.String)",
             ALD_PlaceOne: "(System.String,System.String)",
             ALD_RemoveOne: "(System.String,System.String)",
@@ -371,6 +376,40 @@ export async function initWasm(baseUrl) {
         if (!fn) throw new Error("Solver_Analyze not available in this build");
         return JSON.parse(
           fn(toJsonString(level), cfg ? JSON.stringify(cfg) : null)
+        );
+      },
+      engineReplayMoves: async (level, moves) => {
+        let fn = has("Engine_ReplayMoves")
+          ? E.Engine_ReplayMoves
+          : await ensureBound("Engine_ReplayMoves");
+        if (!fn) throw new Error("Engine_ReplayMoves not available");
+        return JSON.parse(fn(toJsonString(level), String(moves || "")));
+      },
+      solverFindPathToKey: async (level, keyA, keyB, cfg) => {
+        let fn = has("Solver_FindPathToKey")
+          ? E.Solver_FindPathToKey
+          : await ensureBound("Solver_FindPathToKey");
+        if (!fn) throw new Error("Solver_FindPathToKey not available");
+        return JSON.parse(
+          fn(
+            toJsonString(level),
+            String(keyA || "0"),
+            String(keyB || "0"),
+            cfg ? JSON.stringify(cfg) : null
+          )
+        );
+      },
+      solverTraceAlign: async (level, moves, cfg) => {
+        let fn = has("Solver_TraceAlign")
+          ? E.Solver_TraceAlign
+          : await ensureBound("Solver_TraceAlign");
+        if (!fn) throw new Error("Solver_TraceAlign not available");
+        return JSON.parse(
+          fn(
+            toJsonString(level),
+            String(moves || ""),
+            cfg ? JSON.stringify(cfg) : null
+          )
         );
       },
       aldTryMutate: async (level) => {

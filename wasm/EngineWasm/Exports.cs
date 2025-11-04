@@ -16,6 +16,17 @@ using System.Runtime.InteropServices.JavaScript;
 
 public partial class Exports
 {
+    static Exports()
+    {
+        try
+        {
+            // Keep optional diagnostics from being trimmed
+            _ = (System.Func<string, string, string, string>)Solver_TraceAlign;
+            // Also keep FindPathToKey exported (prevents IL trimming)
+            _ = (System.Func<string, string, string, string, string>)Solver_FindPathToKey;
+        }
+        catch { }
+    }
     public static void Main() { }
 
     private static void Log(string msg)
@@ -30,6 +41,8 @@ public partial class Exports
     private static JsonSerializerOptions J => new JsonSerializerOptions
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
+        IncludeFields = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         WriteIndented = false
     };
@@ -107,6 +120,273 @@ public partial class Exports
 #if EXPOSE_WASM
     [JSExport]
 #endif
+    public static string Engine_ReplayMoves(string levelJson, string moves)
+    {
+        try
+        {
+            var s = Loader.FromJson(levelJson);
+            if (string.IsNullOrEmpty(moves))
+                return JsonSerializer.Serialize(new { ok = false, reason = "no_moves" }, J);
+
+            Dir Map(char c)
+            {
+                return c switch
+                {
+                    'w' or 'W' => Dir.N,
+                    'd' or 'D' => Dir.E,
+                    's' or 'S' => Dir.S,
+                    'a' or 'A' => Dir.W,
+                    _ => (Dir)255
+                };
+            }
+
+            for (int i = 0; i < moves.Length; i++)
+            {
+                var ch = moves[i];
+                var dir = Map(ch);
+                if ((int)dir == 255) continue; // ignore unknown chars
+
+                var before = CloneState(s);
+                var anyBefore = s.AnyButtonPressed;
+                var lastBefore = s.LastAnyButtonPressed;
+                var from = s.PlayerPos;
+                var v = dir.Vec();
+                var to = new V2(from.x + v.dx, from.y + v.dy);
+
+                var res = Engine.Step(s, dir);
+                bool changed = !ShallowEqual(before, s);
+
+                // Win/lose checks first
+                if (res.GameOver)
+                {
+                    var payload = new
+                    {
+                        ok = false,
+                        gameOver = true,
+                        at = i,
+                        dir = dir.ToString(),
+                        from = new { x = from.x, y = from.y },
+                        to = new { x = to.x, y = to.y },
+                        anyBefore,
+                        anyAfter = s.AnyButtonPressed,
+                        lastBefore,
+                        lastAfter = s.LastAnyButtonPressed,
+                        deltas = MapDeltas(res.Deltas)
+                    };
+                    return JsonSerializer.Serialize(payload, J);
+                }
+                if (res.Win)
+                {
+                    var payload = new
+                    {
+                        ok = true,
+                        win = true,
+                        at = i,
+                        dir = dir.ToString(),
+                        from = new { x = from.x, y = from.y },
+                        to = new { x = to.x, y = to.y },
+                        anyBefore,
+                        anyAfter = s.AnyButtonPressed,
+                        lastBefore,
+                        lastAfter = s.LastAnyButtonPressed,
+                        deltas = MapDeltas(res.Deltas)
+                    };
+                    return JsonSerializer.Serialize(payload, J);
+                }
+
+                // Blocked or no-op detection
+                if (!changed)
+                {
+                    // Capture target tile info (bounds-safe)
+                    bool inB = s.Grid.InBounds(to);
+                    var cellInfo = inB ? s.Grid.CellRef(to) : null;
+                    var ttype = inB ? (TileType?)cellInfo.Type : null;
+                    var traits = inB ? TileTraits.For(cellInfo.Type).Active : Traits.None;
+                    var payload = new
+                    {
+                        ok = false,
+                        blocked = true,
+                        at = i,
+                        dir = dir.ToString(),
+                        from = new { x = from.x, y = from.y },
+                        to = new { x = to.x, y = to.y },
+                        anyBefore,
+                        anyAfter = s.AnyButtonPressed,
+                        lastBefore,
+                        lastAfter = s.LastAnyButtonPressed,
+                        targetInBounds = inB,
+                        targetTile = ttype?.ToString(),
+                        targetTraits = (ulong)traits,
+                        deltas = MapDeltas(res.Deltas)
+                    };
+                    return JsonSerializer.Serialize(payload, J);
+                }
+            }
+
+            // Completed all moves without win/lose; report final state
+            var finalPayload = new
+            {
+                ok = s.Win,
+                win = s.Win,
+                reason = s.Win ? null : "ended_without_win",
+                player = new { x = s.PlayerPos.x, y = s.PlayerPos.y },
+                any = s.AnyButtonPressed,
+                last = s.LastAnyButtonPressed
+            };
+            return JsonSerializer.Serialize(finalPayload, J);
+        }
+        catch (System.Exception ex)
+        {
+            return JsonSerializer.Serialize(new { ok = false, error = ex.Message }, J);
+        }
+    }
+
+#if EXPOSE_WASM
+    [JSExport]
+#endif
+    public static string Solver_FindPathToKey(string levelJson, string keyAHex, string keyBHex, string configJson = null)
+    {
+        try
+        {
+            var initial = Loader.FromJson(levelJson);
+            var cfg = new SlimeGrid.Tools.Solver.SolverConfig();
+            if (!string.IsNullOrWhiteSpace(configJson))
+            {
+                try { cfg = JsonSerializer.Deserialize<SlimeGrid.Tools.Solver.SolverConfig>(configJson, J) ?? cfg; }
+                catch { }
+            }
+
+            ulong a = Convert.ToUInt64((keyAHex ?? "0"), 16);
+            ulong b = Convert.ToUInt64((keyBHex ?? "0"), 16);
+            var target = new SlimeGrid.Tools.Solver.StateKey(a, b);
+
+            var ctx = SlimeGrid.Tools.Solver.StateHasher.BuildLevelContext(initial.Grid);
+            var rootKey = SlimeGrid.Tools.Solver.StateHasher.ComputeZobrist(initial, ctx);
+
+            var visited = new Dictionary<SlimeGrid.Tools.Solver.StateKey, int>(4096) { [rootKey] = 0 };
+            var q = new Queue<(GameState s, SlimeGrid.Tools.Solver.StateKey k, string path, int depth)>();
+            q.Enqueue((CloneState(initial), rootKey, string.Empty, 0));
+
+            int nodes = 0; bool nodesHit = false, depthHit = false, timeHit = false;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            string foundPath = null;
+
+            while (q.Count > 0)
+            {
+                if (cfg.EnforceTimeCap && sw.Elapsed.TotalSeconds > cfg.TimeCapSeconds) { timeHit = true; break; }
+                var (s, k, path, depth) = q.Dequeue();
+                nodes++; if (nodes >= cfg.NodesCap) { nodesHit = true; break; }
+                if (depth >= cfg.DepthCap) { depthHit = true; continue; }
+
+                if (k.Equals(target)) { foundPath = path; break; }
+
+                foreach (var dir in new[] { Dir.N, Dir.E, Dir.S, Dir.W })
+                {
+                    var child = CloneState(s);
+                    // Advance child by one step; ignore return payload, discard out param
+                    Engine.Step(child, dir, out _);
+                    var childKey = SlimeGrid.Tools.Solver.StateHasher.ComputeZobrist(child, ctx);
+                    int newDepth = depth + 1;
+                    if (visited.TryGetValue(childKey, out var seen) && seen <= newDepth) continue;
+                    visited[childKey] = newDepth;
+
+                    char ch = dir switch { Dir.N => 'w', Dir.E => 'd', Dir.S => 's', _ => 'a' };
+                    // Do not continue from terminal losing states
+                    if (!(child.GameOver))
+                        q.Enqueue((child, childKey, path + ch, newDepth));
+                }
+            }
+
+            var payload = new
+            {
+                ok = foundPath != null,
+                moves = foundPath,
+                length = foundPath != null ? foundPath.Length : 0,
+                nodesExplored = nodes,
+                caps = new { nodesHit, depthHit, timeHit }
+            };
+            return JsonSerializer.Serialize(payload, J);
+        }
+        catch (Exception ex)
+        {
+            return JsonSerializer.Serialize(new { ok = false, err = ex.Message }, J);
+        }
+    }
+
+#if EXPOSE_WASM
+    [JSExport]
+#endif
+    public static string Solver_TraceAlign(string levelJson, string moves, string configJson = null)
+    {
+        try
+        {
+            var s = Loader.FromJson(levelJson);
+            var cfg = new SlimeGrid.Tools.Solver.SolverConfig();
+            if (!string.IsNullOrWhiteSpace(configJson))
+            {
+                try { cfg = JsonSerializer.Deserialize<SlimeGrid.Tools.Solver.SolverConfig>(configJson, J) ?? cfg; }
+                catch { }
+            }
+            // Ensure strict visited (no relax) for alignment
+            cfg.DisableVisited = false;
+            cfg.RelaxVisitedFromDepth = int.MaxValue;
+
+            static Dir Map(char c) => c switch
+            {
+                'w' or 'W' => Dir.N,
+                'd' or 'D' => Dir.E,
+                's' or 'S' => Dir.S,
+                'a' or 'A' => Dir.W,
+                _ => (Dir)255
+            };
+
+            var ctx = SlimeGrid.Tools.Solver.StateHasher.BuildLevelContext(s.Grid);
+            var entries = new System.Collections.Generic.List<object>();
+            int idx = 0;
+            var key0 = SlimeGrid.Tools.Solver.StateHasher.ComputeZobrist(s, ctx);
+            entries.Add(new { idx = idx++, keyA = key0.A.ToString("X16"), keyB = key0.B.ToString("X16"), seenDepth = 0 });
+
+            foreach (var ch in (moves ?? string.Empty))
+            {
+                var dir = Map(ch);
+                if ((int)dir == 255) continue;
+                Engine.Step(s, dir);
+                var k = SlimeGrid.Tools.Solver.StateHasher.ComputeZobrist(s, ctx);
+                entries.Add(new { idx = idx++, keyA = k.A.ToString("X16"), keyB = k.B.ToString("X16") });
+            }
+
+            var visited = SlimeGrid.Tools.Solver.BruteForceSolver.CollectVisitedBfs(Loader.FromJson(levelJson), cfg);
+            var outArr = new System.Collections.Generic.List<object>(entries.Count);
+            idx = 0;
+            foreach (var e in entries)
+            {
+                dynamic de = e;
+                string a = de.keyA; string b = de.keyB;
+                ulong ka = System.Convert.ToUInt64(a, 16);
+                ulong kb = System.Convert.ToUInt64(b, 16);
+                var sk = new SlimeGrid.Tools.Solver.StateKey(ka, kb);
+                int sd = visited.TryGetValue(sk, out var d) ? d : -1;
+                outArr.Add(new { idx = de.idx, keyA = a, keyB = b, seenDepth = sd });
+                idx++;
+            }
+            int firstMissing = -1;
+            for (int i = 0; i < outArr.Count; i++)
+            {
+                var o = (dynamic)outArr[i];
+                if ((int)o.seenDepth < 0) { firstMissing = i; break; }
+            }
+            var payload = new { ok = true, prefixes = outArr, firstMissing };
+            return JsonSerializer.Serialize(payload, J);
+        }
+        catch (Exception ex)
+        {
+            return JsonSerializer.Serialize(new { ok = false, err = ex.Message }, J);
+        }
+    }
+
+#if EXPOSE_WASM
+    [JSExport]
+#endif
     public static void Engine_CommitBaseline(string sid)
     {
         // Replace the session with a new one whose start+current are set from the current state
@@ -172,8 +452,6 @@ public partial class Exports
         var tt = (TileType)tileTypeId;
         var cell = s.Grid.CellRef(p);
         cell.Type = tt;
-        ApplyRecipeToCell(ref cell, TileTraits.For(tt));
-        cell.Toggled = false;
         s.Grid.CellRef(p) = cell;
         session.PushUndo(before);
         return JsonSerializer.Serialize(new { ok = true }, J);
@@ -269,7 +547,9 @@ public partial class Exports
         }
         try
         {
-            var report = SlimeGrid.Tools.Solver.BruteForceSolver.AnalyzeBfs(s, cfg);
+            var report = cfg.UseBfs
+                ? SlimeGrid.Tools.Solver.BruteForceSolver.AnalyzeBfs(s, cfg)
+                : SlimeGrid.Tools.Solver.BruteForceSolver.Analyze(s, cfg);
             string json = Newtonsoft.Json.JsonConvert.SerializeObject(report);
             return json;
         }
@@ -283,11 +563,11 @@ public partial class Exports
     }
 
 #if SLIMEGRID_ALD
-#if EXPOSE_WASM
-    [JSExport]
-#endif
-    public static string ALD_TryMutate(string levelJson)
-    {
+  #if EXPOSE_WASM
+      [JSExport]
+  #endif
+      public static string ALD_TryMutate(string levelJson)
+      {
         var dto = Newtonsoft.Json.JsonConvert.DeserializeObject<LevelDTO>(levelJson);
         var state = Loader.FromDTO(dto);
         var mask = SlimeGrid.Tools.ALD.InfluenceMask.Compute(state);
@@ -704,11 +984,26 @@ public partial class Exports
         return true;
     }
 
+    private static Grid2D CloneGrid(Grid2D g)
+    {
+        if (g == null) return null;
+        var ng = new Grid2D(g.W, g.H);
+        for (int y = 0; y < g.H; y++)
+            for (int x = 0; x < g.W; x++)
+            {
+                var p = new V2(x, y);
+                ref var oc = ref g.CellRef(p);
+                var nc = new Cell { Type = oc.Type, Orientation = oc.Orientation };
+                ng.SetCell(p, nc);
+            }
+        return ng;
+    }
+
     private static GameState CloneState(GameState s)
     {
         var c = new GameState
         {
-            Grid = s.Grid,
+            Grid = CloneGrid(s.Grid),
             PlayerPos = s.PlayerPos,
             AttachedEntityId = s.AttachedEntityId,
             EntryDir = s.EntryDir,
@@ -736,18 +1031,7 @@ public partial class Exports
         return c;
     }
 
-    private static void ApplyRecipeToCell(ref Cell cell, TT recipe)
-    {
-        cell.ActiveMask = recipe.Active;
-        cell.InactiveMask = recipe.Inactive;
-        cell.ToggleMask = cell.InactiveMask.HasValue ? (cell.ActiveMask ^ cell.InactiveMask.Value) : 0;
-        if (cell.InactiveMask.HasValue)
-        {
-            var cond = (cell.ActiveMask & (Traits.ToggleableByButton | Traits.ToggleableByEntity | Traits.ToggleableByPlayer));
-            cell.InactiveMask = cell.InactiveMask.Value | cond;
-            cell.ToggleMask = cell.ActiveMask ^ cell.InactiveMask.Value;
-        }
-    }
+    private static void ApplyRecipeToCell(ref Cell cell, TT recipe) { }
 
     private static List<object> MapDeltas(List<Delta> deltas)
     {

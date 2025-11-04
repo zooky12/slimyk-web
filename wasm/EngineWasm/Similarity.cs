@@ -62,7 +62,7 @@ namespace SlimeGrid.Tools.ALD
                 for (int x = 0; x < s.Grid.W; x++)
                 {
                     if (!mask[x, y]) continue;
-                    var m = s.Grid.CellRef(new V2(x, y)).ActiveMask; // authored traits
+                    var m = TileTraits.For(s.Grid.CellRef(new V2(x, y)).Type).Active; // authored traits
                     Acc(d, "W", (m & Traits.StopsPlayer) != 0);
                     Acc(d, "SE", (m & Traits.StopsEntity) != 0);
                     Acc(d, "SF", (m & Traits.StopsFlight) != 0);

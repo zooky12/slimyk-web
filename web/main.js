@@ -754,7 +754,7 @@ setupHUD({
     requestRedraw();
   },
 
-  onRunSolver: async ({ maxDepth, maxNodes, onProgress, onSolutions }) => {
+  onRunSolver: async ({ maxDepth, maxNodes, onProgress, onSolutions, useBfs, disableVisited }) => {
     try {
       console.debug && console.debug("[main] onRunSolver start");
     } catch {}
@@ -764,6 +764,8 @@ setupHUD({
         nodesCap: Number(maxNodes) || 200000,
         timeCapSeconds: 10.0,
         enforceTimeCap: false,
+        useBfs: useBfs !== false,
+        disableVisited: !!disableVisited
       };
       const levelDto = toLevelDTO(api.getState());
       // Use worker proxy for solver to keep UI responsive
@@ -791,6 +793,8 @@ setupHUD({
         await call("init", { baseUrl: "./wasm/" });
       } catch {}
       const report = await call("solverAnalyze", levelDto, cfg);
+      // Attach the exact level used to the report for debugging/export
+      try { report.levelEcho = levelDto; } catch {}
       try {
         console.debug && console.debug("Solver report:", report);
       } catch {}
