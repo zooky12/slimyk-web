@@ -237,7 +237,7 @@ namespace SlimeGrid.Logic
             return false;
         }
 
-        static bool AllAllowExitPressed(GameState s)
+        public static bool AllAllowExitPressed(GameState s)
         {
             // Scan every cell that is a ButtonAllowExit and ensure it's pressed by an entity with PressesButtons
             for (int y = 0; y < s.Grid.H; y++)

@@ -22,6 +22,51 @@ namespace SlimeGrid.Logic
             try
             {
                 var root = JObject.Parse(json);
+                // NEW: accept SolverReport JSON (levelSnapshot)
+                try
+                {
+                    var snap = root["levelSnapshot"] as JObject;
+                    if (snap != null && snap["tileGrid"] is JArray)
+                    {
+                        var snapDto = new LevelDTO();
+                        // tileGrid as names
+                        var rows = (JArray)snap["tileGrid"];
+                        snapDto.height = rows.Count;
+                        snapDto.width = rows.Count > 0 ? ((JArray)rows[0]).Count : 0;
+                        snapDto.tileGrid = rows.Select(r => ((JArray)r).Select(c => (string)c).ToArray()).ToArray();
+                        // entities (names + positions)
+                        var ents = new List<EntityDTO>();
+                        if (snap["entities"] is JArray earr)
+                        {
+                            foreach (var e in earr)
+                            {
+                                var typeName = (string?)e["type"] ?? "";
+                                if (!Enum.TryParse<EntityType>(typeName, true, out var et)) continue;
+                                int x = (int?)e["x"] ?? 0; int y = (int?)e["y"] ?? 0;
+                                var edto = new EntityDTO { type = et, x = x, y = y };
+                                var o = (string?)e["orientation"];
+                                if (!string.IsNullOrEmpty(o) && Enum.TryParse<Orientation>(o, true, out var oo)) edto.orientation = oo;
+                                ents.Add(edto);
+                            }
+                        }
+                        snapDto.entities = ents;
+                        return FromDTO(snapDto);
+                    }
+                }
+                catch { }
+
+                // Accept report with levelEcho (legacy UI attach)
+                try
+                {
+                    var echo = root["levelEcho"] as JObject;
+                    if (echo != null)
+                    {
+                        var echoDto = echo.ToObject<LevelDTO>();
+                        if (echoDto != null) return FromDTO(echoDto);
+                    }
+                }
+                catch { }
+
                 var kind = (string?)root["format"]?["kind"];
                 bool looksDtoV2 =
                     string.Equals(kind, "dto-v2", StringComparison.OrdinalIgnoreCase) ||

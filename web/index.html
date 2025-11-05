@@ -284,35 +284,69 @@
                 <button id="keepRunning" title="Reuse current buckets and continue generating">Keep Running</button>
                 <button id="stopAuto" disabled>Stop</button>
                 <button id="autoRestore">Restore Snapshot</button>
-                <label style="margin-left:auto">Levels to generate
-                  <input id="autoAttemptsCount" type="number" value="20" min="1" style="width:96px"/>
-                </label>
-                <label title="Changes applied when starting from the original snapshot">Base changes
-                  <input id="autoBaseChanges" type="number" value="1" min="1" style="width:72px"/>
-                </label>
-                <label title="Changes applied when evolving from a newly accepted level">Evolve changes
-                  <input id="autoEvolveChanges" type="number" value="1" min="1" style="width:72px"/>
-                </label>
-                <label title="Choose among top-K of each bucket as evolution base">
-                  Select top-K
-                  <input id="autoSelectTopK" type="number" value="5" min="1" style="width:72px"/>
-                </label>
-                <label title="Selection skew (0 uniform, 1 proportional to score, >1 favors top)">
-                  Select skew
-                  <input id="autoSelectSkew" type="number" step="0.1" value="1" min="0" style="width:72px"/>
-                </label>
-                <label title="Probability to use the original snapshot as base (0..1). Otherwise pick from buckets.">
-                  Use base chance
-                  <input id="autoBaseUseRatio" type="number" step="0.05" value="0" min="0" max="1" style="width:72px"/>
-                </label>
-                <label title="Fraction of mutations that enable greedy single-edits (0..1)">
-                  Greedy ratio
-                  <input id="autoGreedyRatio" type="number" step="0.05" value="0" min="0" max="1" style="width:72px"/>
-                </label>
-                <label title="Refresh bucket summaries every N attempts">
-                  Refresh every
-                  <input id="autoRefreshEvery" type="number" value="7" min="1" style="width:72px"/>
-                </label>
+              </div>
+              <div class="build-section">
+                <button type="button" class="tile-toggle" data-target="autoParams" aria-expanded="false">Parameters</button>
+                <div class="tile-filter-panel hidden" id="autoParams" aria-hidden="true">
+                  <div class="levels-row">
+                    <label>Levels to generate
+                      <input id="autoAttemptsCount" type="number" value="20" min="1" style="width:96px"/>
+                    </label>
+                    <label title="Changes applied when starting from the original snapshot">Base changes
+                      <input id="autoBaseChanges" type="number" value="1" min="1" style="width:72px"/>
+                    </label>
+                    <label title="Changes applied when evolving from a newly accepted level">Evolve changes
+                      <input id="autoEvolveChanges" type="number" value="1" min="1" style="width:72px"/>
+                    </label>
+                    <label title="Choose among top-K of each bucket as evolution base">
+                      Select top-K
+                      <input id="autoSelectTopK" type="number" value="5" min="1" style="width:72px"/>
+                    </label>
+                    <label title="Selection skew (0 uniform, 1 proportional to score, >1 favors top)">
+                      Select skew
+                      <input id="autoSelectSkew" type="number" step="0.1" value="1" min="0" style="width:72px"/>
+                    </label>
+                    <label title="Probability to use the original snapshot as base (0..1). Otherwise pick from buckets.">
+                      Use base chance
+                      <input id="autoBaseUseRatio" type="number" step="0.05" value="0" min="0" max="1" style="width:72px"/>
+                    </label>
+                    <label title="Fraction of mutations that enable greedy single-edits (0..1)">
+                      Greedy ratio
+                      <input id="autoGreedyRatio" type="number" step="0.05" value="0" min="0" max="1" style="width:72px"/>
+                    </label>
+                    <label title="Refresh bucket summaries every N attempts">
+                      Refresh every
+                      <input id="autoRefreshEvery" type="number" value="7" min="1" style="width:72px"/>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div class="build-section">
+                <button type="button" class="tile-toggle" data-target="autoTrace" aria-expanded="false">Trace Filters (Top-1)</button>
+                <div class="tile-filter-panel hidden" id="autoTrace" aria-hidden="true" style="padding:6px 8px;">
+                  <label for="autoTraceRequire">Require interactions</label>
+                  <select id="autoTraceRequire" multiple size="6" style="min-width:220px;">
+                    <option>MoveFree</option>
+                    <option>PushBox</option>
+                    <option>PushTriangle</option>
+                    <option>PushTipping</option>
+                    <option>PushUnattachable</option>
+                    <option>MultiPush</option>
+                    <option>SlideStart_Player</option>
+                    <option>SlideStep_Player</option>
+                    <option>SlideEnd_Player</option>
+                    <option>PlatePress</option>
+                    <option>PlateRelease</option>
+                    <option>ExitOpen</option>
+                    <option>ExitClose</option>
+                    <option>ExitReach</option>
+                    <option>OrientChange_Box</option>
+                    <option>OrientChange_TriBox</option>
+                    <option>ToggleOn</option>
+                    <option>ToggleOff</option>
+                  </select>
+                  <div class="hint">Any created level must include all selected interactions in its Top-1 trace.</div>
+                </div>
               </div>
               <div class="progress" id="autoProgress">Idle</div>
             </div>

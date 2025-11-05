@@ -140,6 +140,20 @@ function adaptLevel(obj) {
   // If it's already in LevelDTO shape, return as-is
   if (Array.isArray(obj.tileGrid) || Array.isArray(obj.tileCharGrid)) return obj;
 
+  // Accept SolverReport JSON: prefer levelSnapshot; fallback to levelEcho
+  if (obj.levelSnapshot && Array.isArray(obj.levelSnapshot.tileGrid)) {
+    const snap = obj.levelSnapshot;
+    const out = {};
+    out.tileGrid = snap.tileGrid.map(row => Array.isArray(row) ? row.map(canonicalTileName) : []);
+    if (Array.isArray(snap.entities)) {
+      out.entities = snap.entities.map(e => ({ type: canonicalEntityName(e.type), x: Number(e.x)||0, y: Number(e.y)||0, orientation: e.orientation }));
+    }
+    return out;
+  }
+  if (obj.levelEcho && (Array.isArray(obj.levelEcho.tileGrid) || Array.isArray(obj.levelEcho.tileCharGrid))) {
+    return obj.levelEcho;
+  }
+
   const out = {};
   // Dimensions
   const rows = obj.size?.rows ?? obj.height;

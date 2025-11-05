@@ -22,6 +22,8 @@ namespace SlimeGrid.Tools.Solver
         // Optional: relax visited pruning starting at this depth (keep duplicates)
         // Default 60 helps work around edge-sensitive merges on toggle-heavy levels
         public int RelaxVisitedFromDepth = 60;
+        // NEW: emit traces for top K solutions (1 or 3; 0 disables)
+        public int EmitTraceTopK = 3;
     }
 
     public static class BruteForceSolver
@@ -93,6 +95,8 @@ namespace SlimeGrid.Tools.Solver
                 },
                 level = new LevelHeader { width = initial.Grid.W, height = initial.Grid.H, levelHash = ComputeLevelHash(initial) }
             };
+            // Build snapshot (names only) up front
+            report.levelSnapshot = BuildLevelSnapshot(initial);
 
             // Precheck disabled: some solvable levels rely on button/toggle routing
             // that violates simple wall-component reachability. Let the search decide.
@@ -246,7 +250,19 @@ namespace SlimeGrid.Tools.Solver
             for (int i = 0; i < Math.Min(10, filtered.Count); i++)
             {
                 var s = filtered[i];
-                report.topSolutions.Add(new SolutionEntry { length = s.Length, movesPacked = s.Snapshot().Buffer });
+                report.topSolutions.Add(new SolutionEntry { length = s.Length, movesPacked = s.Snapshot().Buffer, movesNESW = s.ToNESWString(s.Length) });
+            }
+
+            // Build traces for Top-1 or Top-3 depending on config
+            if (filtered.Count > 0 && cfg.EmitTraceTopK > 0)
+            {
+                int K = Math.Min(cfg.EmitTraceTopK, Math.Min(3, filtered.Count));
+                var traces = new SolutionTrace[K];
+                for (int i = 0; i < K; i++)
+                {
+                    traces[i] = BuildTrace($"top{(i + 1)}", initial, filtered[i]);
+                }
+                report.solutionTraces = traces;
             }
 
             // Moves analysis (top1 and top3 averages)
@@ -352,6 +368,7 @@ namespace SlimeGrid.Tools.Solver
                 },
                 level = new LevelHeader { width = initial.Grid.W, height = initial.Grid.H, levelHash = ComputeLevelHash(initial) }
             };
+            report.levelSnapshot = BuildLevelSnapshot(initial);
 
             // Precheck disabled here as well; proceed with BFS search.
 
@@ -460,7 +477,15 @@ namespace SlimeGrid.Tools.Solver
             for (int i = 0; i < Math.Min(10, filtered.Count); i++)
             {
                 var s = filtered[i];
-                report.topSolutions.Add(new SolutionEntry { length = s.Length, movesPacked = s.Snapshot().Buffer });
+                report.topSolutions.Add(new SolutionEntry { length = s.Length, movesPacked = s.Snapshot().Buffer, movesNESW = s.ToNESWString(s.Length) });
+            }
+
+            if (filtered.Count > 0 && cfg.EmitTraceTopK > 0)
+            {
+                int K = Math.Min(cfg.EmitTraceTopK, Math.Min(3, filtered.Count));
+                var traces = new SolutionTrace[K];
+                for (int i = 0; i < K; i++) traces[i] = BuildTrace($"top{(i + 1)}", initial, filtered[i]);
+                report.solutionTraces = traces;
             }
 
             if (filtered.Count > 0)
@@ -606,6 +631,190 @@ namespace SlimeGrid.Tools.Solver
                     ng.SetCell(p, nc);
                 }
             return ng;
+        }
+
+        // ---------- Helpers for snapshot/trace ----------
+        static char DirToChar(Dir d) => d switch { Dir.N => 'N', Dir.E => 'E', Dir.S => 'S', _ => 'W' };
+        static char OrientToChar(Orientation o) => o switch { Orientation.N => 'N', Orientation.E => 'E', Orientation.S => 'S', _ => 'W' };
+
+        static SlimeGrid.Tools.Solver.LevelSnapshot BuildLevelSnapshot(GameState s)
+        {
+            var snap = new SlimeGrid.Tools.Solver.LevelSnapshot
+            {
+                width = s.Grid.W,
+                height = s.Grid.H,
+                hash = ComputeLevelHash(s),
+                tileGrid = new string[s.Grid.H][],
+            };
+            for (int y = 0; y < s.Grid.H; y++)
+            {
+                var row = new string[s.Grid.W];
+                for (int x = 0; x < s.Grid.W; x++)
+                {
+                    var p = new V2(x, y);
+                    row[x] = s.Grid.CellRef(p).Type.ToString();
+                }
+                snap.tileGrid[y] = row;
+            }
+            // Stable entity order: row-major by position, then id
+            var list = new List<(int id, Entity e)>();
+            foreach (var kv in s.EntitiesById) list.Add((kv.Key, kv.Value));
+            list.Sort((a, b) =>
+            {
+                int cy = a.e.Pos.y.CompareTo(b.e.Pos.y); if (cy != 0) return cy;
+                int cx = a.e.Pos.x.CompareTo(b.e.Pos.x); if (cx != 0) return cx;
+                return a.id.CompareTo(b.id);
+            });
+            var ents = new List<EntitySnapshot>(list.Count + 1);
+            // Runtime entities (does not include PlayerSpawn)
+            for (int i = 0; i < list.Count; i++)
+            {
+                var e = list[i].e;
+                ents.Add(new EntitySnapshot
+                {
+                    eid = e.Id,
+                    type = e.Type.ToString(),
+                    x = e.Pos.x,
+                    y = e.Pos.y,
+                    orientation = OrientToChar(e.Orientation)
+                });
+            }
+            // Inject PlayerSpawn from current player position for reproducibility
+            try
+            {
+                ents.Add(new EntitySnapshot
+                {
+                    eid = 0,
+                    type = SlimeGrid.Logic.EntityType.PlayerSpawn.ToString(),
+                    x = s.PlayerPos.x,
+                    y = s.PlayerPos.y,
+                    orientation = 'N'
+                });
+            }
+            catch { }
+            snap.entities = ents.ToArray();
+            return snap;
+        }
+
+        static ulong TileMaskAt(GameState s, V2 p)
+        {
+            var m = SlimeGrid.Logic.TraitsUtil.ResolveTileMask(s, p);
+            return (ulong)m;
+        }
+
+        static SolutionTrace BuildTrace(string which, GameState initial, PackedMoves pm)
+        {
+            var s = CloneState(initial);
+            int len = pm.Length;
+            var steps = new TraceStep[len];
+            for (int i = 0; i < len; i++)
+            {
+                var code = pm.GetAt(i); var dir = (Dir)code; char input = DirToChar(dir);
+
+                bool exitPrev = SlimeGrid.Logic.Engine.AllAllowExitPressed(s);
+                bool anyBtnPrev = s.AnyButtonPressed;
+
+                var from = s.PlayerPos;
+                bool slipPrev = SlimeGrid.Logic.TraitsUtil.TileIsSlippery(s, from);
+
+                // Snapshot tile-only masks BEFORE step
+                var masksPre = new ulong[s.Grid.W, s.Grid.H];
+                for (int y = 0; y < s.Grid.H; y++)
+                    for (int x = 0; x < s.Grid.W; x++)
+                        masksPre[x, y] = TileMaskAt(s, new V2(x, y));
+
+                // Snapshot orientations BEFORE step for moved-entity detection
+                var orientPrev = new Dictionary<int, Orientation>(s.EntitiesById.Count);
+                foreach (var kv in s.EntitiesById) orientPrev[kv.Key] = kv.Value.Orientation;
+
+                var res = SlimeGrid.Logic.Engine.Step(s, dir);
+
+                var to = s.PlayerPos;
+                bool slipNext = SlimeGrid.Logic.TraitsUtil.TileIsSlippery(s, to);
+                ulong playerToMask = TileMaskAt(s, to);
+
+                // Collect movement details
+                string moveKind = "move"; int tilesMoved = Math.Abs(to.x - from.x) + Math.Abs(to.y - from.y);
+                var moved = new List<EntityDelta>();
+                var togglePos = new List<V2>();
+                // Try to pick player MoveStraight for kind/tiles
+                foreach (var d in res.Deltas)
+                {
+                    if (d is SlimeGrid.Logic.MoveStraight ms && ms.Id == -1)
+                    {
+                        // Player move
+                        tilesMoved = ms.Tiles > 0 ? ms.Tiles : tilesMoved;
+                        if (!string.IsNullOrEmpty(ms.Kind))
+                        {
+                            var k = ms.Kind.ToLowerInvariant();
+                            if (k == "fly") moveKind = "fly";
+                            else if (k == "slide") moveKind = "slide";
+                            else if (k == "step") moveKind = moveKind; // keep existing
+                        }
+                    }
+                    else if (d is SlimeGrid.Logic.MoveEntity me)
+                    {
+                        var id = me.Id;
+                        var e = s.EntitiesById.ContainsKey(id) ? s.EntitiesById[id] : null;
+                        var typeName = e != null ? e.Type.ToString() : string.Empty;
+                        var prevO = orientPrev.TryGetValue(id, out var po) ? po : (e != null ? e.Orientation : Orientation.N);
+                        var nextO = e != null ? e.Orientation : prevO;
+                        moved.Add(new EntityDelta
+                        {
+                            eid = id,
+                            type = typeName,
+                            from = new Vec2i { x = me.From.x, y = me.From.y },
+                            to = new Vec2i { x = me.To.x, y = me.To.y },
+                            orientPrev = OrientToChar(prevO),
+                            orientNext = OrientToChar(nextO),
+                            destTraitsMask = TileMaskAt(s, me.To)
+                        });
+                        // Movement kind priority: if any entity tumbled, prefer tumble; else if any moved and not slide/fly, pick push
+                        if (!string.IsNullOrEmpty(me.Kind))
+                        {
+                            var mk = me.Kind.ToLowerInvariant();
+                            if (mk == "tumble") moveKind = "tumble";
+                            else if (mk == "push" && moveKind == "move") moveKind = "push";
+                        }
+                        else if (moveKind == "move") moveKind = "push";
+                    }
+                    else if (d is SlimeGrid.Logic.AnimationCue cue && cue.Type == SlimeGrid.Logic.CueType.ToggleSweep && cue.At.HasValue)
+                    {
+                        togglePos.Add(cue.At.Value);
+                    }
+                }
+
+                var toggles = new List<TileTraitDelta>(togglePos.Count);
+                foreach (var p in togglePos)
+                {
+                    ulong prevMask = masksPre[p.x, p.y];
+                    ulong nextMask = TileMaskAt(s, p);
+                    toggles.Add(new TileTraitDelta { pos = new Vec2i { x = p.x, y = p.y }, traitsPrevMask = prevMask, traitsNextMask = nextMask });
+                }
+
+                bool exitNext = SlimeGrid.Logic.Engine.AllAllowExitPressed(s);
+                bool anyBtnNext = s.AnyButtonPressed;
+
+                steps[i] = new TraceStep
+                {
+                    input = input,
+                    moveKind = moveKind,
+                    tilesMoved = tilesMoved <= 0 ? 1 : tilesMoved,
+                    playerFrom = new Vec2i { x = from.x, y = from.y },
+                    playerTo = new Vec2i { x = to.x, y = to.y },
+                    playerOnSlipPrev = slipPrev,
+                    playerOnSlipNext = slipNext,
+                    playerDestTraitsMask = playerToMask,
+                    moved = moved.ToArray(),
+                    tileDeltas = toggles.ToArray(),
+                    exitActivePrev = exitPrev,
+                    exitActiveNext = exitNext,
+                    anyButtonPrev = anyBtnPrev,
+                    anyButtonNext = anyBtnNext
+                };
+            }
+
+            return new SolutionTrace { which = which, steps = steps };
         }
 
         static GameState CloneState(GameState s)

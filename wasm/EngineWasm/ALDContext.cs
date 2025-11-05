@@ -17,6 +17,7 @@ namespace SlimeGrid.Tools.ALD
         public SelectionSettings selection { get; set; } = new();
         public DedupeSettings dedupe { get; set; } = new();
         public List<DerivedFeatureConfig> derived { get; set; } = new();
+        public List<string> traceRequire { get; set; } = new();
     }
 
     public sealed class MutationSettings
@@ -117,8 +118,24 @@ namespace SlimeGrid.Tools.ALD
             if (!SeenSignatures.Add(sig))
                 return (false, Array.Empty<string>(), new Dictionary<string, float>());
 
+            // Fast pre-check: if required interactions imply certain tiles/traits/entities that are absent,
+            // skip costly solver analysis immediately.
+            try { if (!HasRequiredTracePrereqs(dto, Settings.traceRequire)) return (false, Array.Empty<string>(), new Dictionary<string, float>()); } catch {}
+
             var cfg = Settings.solver ?? new SolverConfig();
             var report = BruteForceSolver.AnalyzeBfs(s, cfg);
+            try { Heuristics.AnnotateReport(report); } catch {}
+
+            // Mechanics gating: require all specified interactions in Top-1
+            try
+            {
+                var req = Settings.traceRequire ?? new List<string>();
+                if (req.Count > 0)
+                {
+                    var have = new HashSet<string>(report.mechanics?.top1?.interactions ?? Array.Empty<string>(), StringComparer.Ordinal);
+                    foreach (var tag in req) { if (!string.IsNullOrWhiteSpace(tag) && !have.Contains(tag)) return (false, Array.Empty<string>(), new Dictionary<string, float>()); }
+                }
+            } catch {}
 
             // Basic reject: unsolvable
             if (report.topSolutions == null || report.topSolutions.Count == 0)
@@ -145,6 +162,89 @@ namespace SlimeGrid.Tools.ALD
                 }
             }
             return (acceptedNames.Count > 0, acceptedNames.ToArray(), perScores);
+        }
+
+        // Map required interaction tags to minimal level prerequisites (tiles/traits/entities)
+        private bool HasRequiredTracePrereqs(LevelDTO dto, List<string> required)
+        {
+            if (required == null || required.Count == 0) return true;
+
+            // Scan tiles: compute presence flags by traits
+            bool hasSlipery = false;
+            bool hasButtonToggle = false;
+            bool hasButtonAllowExit = false;
+            bool hasExitTile = false;
+            bool hasAnyToggleable = false; // any toggleable/untoggleable by any agent
+
+            if (dto.tileGrid != null && dto.tileGrid.Length > 0)
+            {
+                for (int y = 0; y < dto.tileGrid.Length; y++)
+                {
+                    var row = dto.tileGrid[y]; if (row == null) continue;
+                    for (int x = 0; x < row.Length; x++)
+                    {
+                        var name = row[x] ?? TileType.Floor.ToString();
+                        if (!Enum.TryParse<TileType>(name, true, out var T)) continue;
+                        var traits = TileTraits.For(T).Active;
+                        if ((traits & Traits.Slipery) != 0) hasSlipery = true;
+                        if ((traits & Traits.ButtonToggle) != 0) hasButtonToggle = true;
+                        if ((traits & Traits.ButtonAllowExit) != 0) hasButtonAllowExit = true;
+                        if ((traits & Traits.ExitPlayer) != 0) hasExitTile = true;
+                        if (((traits & Traits.ToggleableByButton) != 0) || ((traits & Traits.UntoggleableByButton) != 0) ||
+                            ((traits & Traits.ToggleableByPlayer) != 0) || ((traits & Traits.UntoggleableByPlayer) != 0) ||
+                            ((traits & Traits.ToggleableByEntity) != 0) || ((traits & Traits.UntoggleableByEntity) != 0))
+                            hasAnyToggleable = true;
+                    }
+                }
+            }
+
+            // Scan entities: presence by type and pushable count
+            bool hasBoxBasic = false, hasBoxTriangle = false, hasBoxTipping = false, hasBoxUnattachable = false;
+            int pushableCount = 0;
+            foreach (var e in dto.entities ?? new List<EntityDTO>())
+            {
+                var et = e.type;
+                if (et == EntityType.BoxBasic) { hasBoxBasic = true; }
+                else if (et == EntityType.BoxTriangle) { hasBoxTriangle = true; }
+                else if (et == EntityType.BoxTipping) { hasBoxTipping = true; }
+                else if (et == EntityType.BoxUnattachable) { hasBoxUnattachable = true; }
+
+                // Pushable trait via catalog
+                try
+                {
+                    var def = EntityCatalog.Map[et];
+                    if ((def.Traits & Traits.Pushable) != 0) pushableCount++;
+                }
+                catch { }
+            }
+
+            foreach (var tag in required)
+            {
+                if (string.IsNullOrWhiteSpace(tag)) continue;
+                switch (tag)
+                {
+                    case "PushBox": if (!hasBoxBasic) return false; break;
+                    case "PushTriangle": if (!hasBoxTriangle) return false; break;
+                    case "PushTipping": if (!hasBoxTipping) return false; break;
+                    case "PushUnattachable": if (!hasBoxUnattachable) return false; break;
+                    case "MultiPush": if (pushableCount < 2) return false; break;
+                    case "OrientChange_Box": if (!hasBoxBasic) return false; break;
+                    case "OrientChange_TriBox": if (!hasBoxTriangle) return false; break;
+                    case "SlideStart_Player":
+                    case "SlideStep_Player":
+                    case "SlideEnd_Player": if (!hasSlipery) return false; break;
+                    case "PlatePress":
+                    case "PlateRelease": if (!hasButtonToggle) return false; break;
+                    case "ExitOpen":
+                    case "ExitClose": if (!hasButtonAllowExit) return false; break;
+                    case "ExitReach": if (!hasExitTile) return false; break;
+                    case "ToggleOn":
+                    case "ToggleOff": if (!hasAnyToggleable) return false; break;
+                    // MoveFree and others without clear prerequisites: ignore
+                    default: break;
+                }
+            }
+            return true;
         }
 
         public LevelDTO SelectBase()
@@ -245,11 +345,54 @@ namespace SlimeGrid.Tools.ALD
                 var state = Loader.FromDTO(dto);
                 int W = state.Grid.W, H = state.Grid.H;
                 bool hadAllowList = (m.tilesPlace != null && m.tilesPlace.Count > 0);
+
+                // Compute reachable area from player using simple tile passability (non-StopsPlayer)
+                var reachable = new bool[W, H];
+                var q = new Queue<V2>();
+                var p0 = state.PlayerPos;
+                bool InB(V2 p) => p.x >= 0 && p.y >= 0 && p.x < W && p.y < H;
+                bool Pass(V2 p)
+                {
+                    var mask = TraitsUtil.ResolveTileMask(state, p);
+                    return (mask & Traits.StopsPlayer) == 0 && (mask & Traits.HoleForPlayer) == 0;
+                }
+                if (InB(p0) && Pass(p0)) { reachable[p0.x, p0.y] = true; q.Enqueue(p0); }
+                var dirs = new (int dx, int dy)[] { (1,0),(-1,0),(0,1),(0,-1) };
+                while (q.Count > 0)
+                {
+                    var p = q.Dequeue();
+                    foreach (var (dx,dy) in dirs)
+                    {
+                        var np = new V2(p.x+dx, p.y+dy);
+                        if (!InB(np) || reachable[np.x,np.y] || !Pass(np)) continue;
+                        reachable[np.x,np.y] = true; q.Enqueue(np);
+                    }
+                }
+                bool IsAdjacentToReach(int x,int y)
+                {
+                    foreach (var (dx,dy) in dirs)
+                    {
+                        int nx=x+dx, ny=y+dy; if (nx<0||ny<0||nx>=W||ny>=H) continue; if (reachable[nx,ny]) return true;
+                    }
+                    return false;
+                }
+
+                // Build candidate positions: inside reachable OR immediate wall adjacent to reachable
+                var candPos = new List<(int x,int y)>();
+                for (int y = 0; y < H; y++)
+                    for (int x = 0; x < W; x++)
+                    {
+                        var t = state.Grid.CellRef(new V2(x,y)).Type;
+                        bool okPos = reachable[x,y] || (t == TileType.Wall && IsAdjacentToReach(x,y));
+                        if (okPos) candPos.Add((x,y));
+                    }
+
                 if (hadAllowList)
                 {
-                    for (int tries = 0; tries < 16; tries++)
+                    // Try limited attempts within candidate positions
+                    for (int tries = 0; tries < 24 && candPos.Count > 0; tries++)
                     {
-                        int x = Rng.Next(W), y = Rng.Next(H);
+                        var (x,y) = candPos[Rng.Next(candPos.Count)];
                         var name = m.tilesPlace[Rng.Next(m.tilesPlace.Count)];
                         if (!Enum.TryParse<TileType>(name, true, out var tt)) continue;
                         var cur = state.Grid.CellRef(new V2(x, y)).Type;
@@ -289,16 +432,41 @@ namespace SlimeGrid.Tools.ALD
                         else
                         {
                             var mask = TraitsUtil.ResolveTileMask(state, new V2(x, y));
-                            if ((mask & Traits.StopsEntity) != 0) continue;
+                            // Allow placement on tiles that "stick" entities even if they also stop them
+                            if (((mask & Traits.StopsEntity) != 0) && ((mask & Traits.SticksEntity) == 0)) continue;
                             if ((mask & Traits.HoleForEntity) != 0) continue;
                         }
                         if (state.EntityAt.ContainsKey(new V2(x, y))) continue;
                         var next = JsonConvert.DeserializeObject<LevelDTO>(JsonConvert.SerializeObject(dto));
                         if (next.entities == null) next.entities = new List<EntityDTO>();
-                        // Ensure uniqueness of PlayerSpawn
-                        if (et == EntityType.PlayerSpawn) next.entities.RemoveAll(e => e.type == EntityType.PlayerSpawn);
-                        next.entities.Add(new EntityDTO { type = et, x = x, y = y });
-                        if (RespectsCounts(next, m)) return next;
+                        // If adding would exceed configured max, relocate an existing entity of this type instead
+                        bool relocated = false;
+                        if (m.entityCounts != null && m.entityCounts.TryGetValue(et.ToString(), out var mm))
+                        {
+                            var curCounts = CountEntities(dto);
+                            curCounts.TryGetValue(et.ToString(), out var cur);
+                            if (mm.max.HasValue && cur >= mm.max.Value)
+                            {
+                                // Ensure target not occupied in next snapshot
+                                if (!next.entities.Any(e => e != null && e.x == x && e.y == y))
+                                {
+                                    int idx = next.entities.FindIndex(e => e != null && e.type == et);
+                                    if (idx >= 0)
+                                    {
+                                        var ee = next.entities[idx]; ee.x = x; ee.y = y; next.entities[idx] = ee;
+                                        if (RespectsCounts(next, m)) return next;
+                                        relocated = true;
+                                    }
+                                }
+                            }
+                        }
+                        if (!relocated)
+                        {
+                            // Ensure uniqueness of PlayerSpawn
+                            if (et == EntityType.PlayerSpawn) next.entities.RemoveAll(e => e.type == EntityType.PlayerSpawn);
+                            next.entities.Add(new EntityDTO { type = et, x = x, y = y });
+                            if (RespectsCounts(next, m)) return next;
+                        }
                     }
                 }
                 return dto;

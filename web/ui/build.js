@@ -334,6 +334,17 @@ export function setupBuildUI(api, {
         try { await setTile(x, y, 'wall', 'N'); } catch {}
       }
     }
+    // Also remove any entities outside the reachable area
+    try {
+      const ents = Array.isArray(d.entities) ? d.entities.slice() : [];
+      for (const e of ents) {
+        if (!e) continue;
+        const inside = e.x >= 0 && e.y >= 0 && e.x < d.w && e.y < d.h && seen[e.y][e.x];
+        if (!inside) {
+          try { await api.applyEdit(EDIT.Remove, e.x, e.y, 0, 0); } catch {}
+        }
+      }
+    } catch {}
     markModified();
   });
 
@@ -493,7 +504,20 @@ export function setupBuildUI(api, {
     const solver = makeSolver();
     try {
       await compactBorders();
-      let baseSig = makeSignature(await analyzeCurrent(solver));
+      const baseReport = await analyzeCurrent(solver);
+      let baseSig = makeSignature(baseReport);
+      // Baseline shortest solution moves (w/d/s/a) and length
+      let baselineMoves = '';
+      let baselineLen = 0;
+      try {
+        const top = Array.isArray(baseReport?.topSolutions) ? baseReport.topSolutions : [];
+        if (top.length > 0){
+          const s0 = top[0];
+          baselineLen = (s0.length|0);
+          // Prefer movesPacked decoded to w/d/s/a used by Engine_ReplayMoves
+          baselineMoves = unpackMovesPacked(s0.movesPacked, s0.length|0);
+        }
+      } catch {}
       const d = dto(); if (!d) return;
       const wallId = api.ids?.tile?.wall;
       const passable = (x,y)=> (d.tiles[y*d.w+x]??0) !== wallId;
@@ -501,8 +525,66 @@ export function setupBuildUI(api, {
       const ord=[]; const dirs2=[[1,0],[-1,0],[0,1],[0,-1]]; while(q.length){ const {x,y}=q.shift(); ord.push({x,y}); for(const [dx,dy] of dirs2){ const nx=x+dx, ny=y+dy; if(nx<0||nx>=d.w||ny<0||ny>=d.h) continue; if(seen[ny][nx]) continue; if(!passable(nx,ny)) continue; seen[ny][nx]=true; q.push({x:nx,y:ny}); } }
       const tilesArr = (typeof api.getTiles==='function')? api.getTiles():[]; const idToName={}; for(const t of tilesArr) idToName[t.id]=t.name;
       const simpler = (name)=>{ const nc=String(name||'').toLowerCase(); const out=[]; if(nc!=='floor'&&nc!=='wall'&&nc!=='hole') out.push('Floor'); if(nc!=='wall'&&nc!=='hole'){ if(nc.includes('hole')||nc.includes('grill')) out.push('Hole'); out.push('Wall'); } return out; };
-      for (const {x,y} of ord){ const id=d.tiles[y*d.w+x]; const name=idToName[id]||''; const lc=name.toLowerCase(); if (lc==='floor'||lc==='wall'||lc==='hole') continue; const cands=simpler(name); for(const cand of cands){ const snap=toLevelDTOFromDraw(dto()); try{ await setTile(x,y,cand,'N'); } catch { await api.setState(snap); continue; } const sig=makeSignature(await analyzeCurrent(solver)); if (sameSignature(baseSig, sig)){ baseSig=sig; d.tiles[y*d.w+x]=(api.ids?.tile?.[cand] ?? api.ids?.tile?.[cand.toLowerCase?.()||cand.toLowerCase()])|0; break; } else { await api.setState(snap); } } }
-      await compactBorders(); markModified();
+      for (const {x,y} of ord){ const id=d.tiles[y*d.w+x]; const name=idToName[id]||''; const lc=name.toLowerCase(); if (lc==='floor'||lc==='wall'||lc==='hole') continue; const cands=simpler(name); for(const cand of cands){ const snap=toLevelDTOFromDraw(dto()); try{ await setTile(x,y,cand,'N'); } catch { await api.setState(snap); continue; } // 1) Fast replay of baseline moves
+        if (baselineMoves && baselineMoves.length>0){ try { const rep = await api.engineReplayMoves(toLevelDTOFromDraw(dto()), baselineMoves); if(!(rep && rep.ok && rep.win)){ await api.setState(snap); continue; } } catch { await api.setState(snap); continue; } }
+        // 2) Bounded BFS up to baselineLen-1 to detect shorter solutions
+        if (baselineLen > 1){ try { const bounded = await solver.analyze(toLevelDTOFromDraw(dto()), { depthCap: Math.max(1, baselineLen-1), nodesCap: 50000, timeCapSeconds: 2.0, enforceTimeCap: true, useBfs: true, disableVisited: false }); const shorter = (Number.isFinite(bounded?.solutionsFilteredCount) ? (bounded.solutionsFilteredCount|0) : 0) > 0; if (shorter){ await api.setState(snap); continue; } } catch { /* inconclusive -> revert */ await api.setState(snap); continue; } }
+        // 3) Accept if full signature unchanged (final guard)
+        const sig=makeSignature(await analyzeCurrent(solver)); if (sameSignature(baseSig, sig)){ baseSig=sig; d.tiles[y*d.w+x]=(api.ids?.tile?.[cand] ?? api.ids?.tile?.[cand.toLowerCase?.()||cand.toLowerCase()])|0; break; } else { await api.setState(snap); } } }
+
+      // Entity simplification: try remove, replace with BoxBasic, or remove+set tile (Wall/Hole/Floor) if solution signature stays
+      try {
+        const dEnt = dto(); if (dEnt) {
+          const wallIdE = api.ids?.tile?.wall;
+          const passE = (x,y)=> (dEnt.tiles[y*dEnt.w+x]??0) !== wallIdE;
+          const seenE = Array.from({length:dEnt.h},()=>Array(dEnt.w).fill(false));
+          const qE=[]; const pxE=dEnt.player?.x, pyE=dEnt.player?.y; if (Number.isInteger(pxE)&&Number.isInteger(pyE)&&passE(pxE,pyE)){ seenE[pyE][pxE]=true; qE.push({x:pxE,y:pyE}); }
+          const dirsE=[[1,0],[-1,0],[0,1],[0,-1]]; while(qE.length){ const {x,y}=qE.shift(); for(const [dx,dy] of dirsE){ const nx=x+dx, ny=y+dy; if(nx<0||nx>=dEnt.w||ny<0||ny>=dEnt.h) continue; if(seenE[ny][nx]) continue; if(!passE(nx,ny)) continue; seenE[ny][nx]=true; qE.push({x:nx,y:ny}); } }
+          const ents = Array.isArray(dEnt.entities) ? dEnt.entities.slice() : [];
+          for (const e of ents){
+            if (!e) continue;
+            // Skip entities outside reachable; they will be removed later, and skip PlayerSpawn
+            const inside = e.x>=0&&e.y>=0&&e.x<dEnt.w&&e.y<dEnt.h&&seenE[e.y][e.x]; if (!inside) continue;
+            const entName = nameForEntityType(e.type) || '';
+            if (entName === 'PlayerSpawn') continue;
+            // Candidate transforms in order: remove; replace with BoxBasic; remove+Wall; remove+Hole; remove+Floor
+            const attempts = [
+              async () => { await api.applyEdit(EDIT.Remove, e.x, e.y, 0, 0); },
+              async () => { await api.applyEdit(EDIT.Remove, e.x, e.y, 0, 0); await api.applyEdit(EDIT.PlaceEntity, e.x, e.y, entityId('BoxBasic'), 0); },
+              async () => { await api.applyEdit(EDIT.Remove, e.x, e.y, 0, 0); await setTile(e.x, e.y, 'Wall', 'N'); },
+              async () => { await api.applyEdit(EDIT.Remove, e.x, e.y, 0, 0); await setTile(e.x, e.y, 'Hole', 'N'); },
+              async () => { await api.applyEdit(EDIT.Remove, e.x, e.y, 0, 0); await setTile(e.x, e.y, 'Floor', 'N'); }
+            ];
+            for (const doChange of attempts){
+              const snap = toLevelDTOFromDraw(dto());
+              try {
+                await doChange();
+              } catch { await api.setState(snap); continue; }
+              // 1) Replay baseline
+              if (baselineMoves && baselineMoves.length>0){ try { const rep = await api.engineReplayMoves(toLevelDTOFromDraw(dto()), baselineMoves); if(!(rep && rep.ok && rep.win)){ await api.setState(snap); continue; } } catch { await api.setState(snap); continue; } }
+              // 2) Bounded BFS
+              if (baselineLen > 1){ try { const bounded = await solver.analyze(toLevelDTOFromDraw(dto()), { depthCap: Math.max(1, baselineLen-1), nodesCap: 50000, timeCapSeconds: 2.0, enforceTimeCap: true, useBfs: true, disableVisited: false }); const shorter = (Number.isFinite(bounded?.solutionsFilteredCount) ? (bounded.solutionsFilteredCount|0) : 0) > 0; if (shorter){ await api.setState(snap); continue; } } catch { await api.setState(snap); continue; } }
+              // 3) Accept if signature unchanged
+              const sig = makeSignature(await analyzeCurrent(solver));
+              if (sameSignature(baseSig, sig)) { baseSig = sig; break; } else { await api.setState(snap); }
+            }
+          }
+        }
+      } catch {}
+      await compactBorders();
+      // Remove entities outside reachable area after compaction
+      try {
+        const d2 = dto(); if (d2) {
+          const wallId2 = api.ids?.tile?.wall;
+          const pass2 = (x,y)=> (d2.tiles[y*d2.w+x]??0) !== wallId2;
+          const seen2 = Array.from({length:d2.h},()=>Array(d2.w).fill(false));
+          const q2=[]; const px2=d2.player?.x, py2=d2.player?.y; if (Number.isInteger(px2)&&Number.isInteger(py2)&&pass2(px2,py2)){ seen2[py2][px2]=true; q2.push({x:px2,y:py2}); }
+          const dirs3=[[1,0],[-1,0],[0,1],[0,-1]]; while(q2.length){ const {x,y}=q2.shift(); for(const [dx,dy] of dirs3){ const nx=x+dx, ny=y+dy; if(nx<0||nx>=d2.w||ny<0||ny>=d2.h) continue; if(seen2[ny][nx]) continue; if(!pass2(nx,ny)) continue; seen2[ny][nx]=true; q2.push({x:nx,y:ny}); } }
+          const ents = Array.isArray(d2.entities)? d2.entities.slice():[];
+          for (const e of ents){ if (!e) continue; const inside = e.x>=0&&e.y>=0&&e.x<d2.w&&e.y<d2.h&&seen2[e.y][e.x]; if (!inside) { try { await api.applyEdit(EDIT.Remove, e.x, e.y, 0, 0); } catch {} } }
+        }
+      } catch {}
+      markModified();
     } catch(e){ console.warn('Simplify failed', e); alert('Simplify failed: '+(e?.message||e)); }
     finally { solver.dispose(); if (a) a.disabled=false; if (b) b.disabled=false; }
   }

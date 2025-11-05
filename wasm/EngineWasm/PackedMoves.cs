@@ -144,3 +144,20 @@ namespace SlimeGrid.Tools.Solver
 }
 #endif
 
+#if UNITY_EDITOR || EXPOSE_WASM
+namespace SlimeGrid.Tools.Solver
+{
+    public static class PackedMovesExtensions
+    {
+        public static string ToNESWString(this PackedMoves pm, int len)
+        {
+            if (len <= 0) return string.Empty;
+            const string map = "NESW";
+            var sb = new System.Text.StringBuilder(len);
+            for (int i = 0; i < len; i++) sb.Append(map[pm.GetAt(i)]);
+            return sb.ToString();
+        }
+    }
+}
+#endif
+

@@ -40,6 +40,18 @@ export function setupHUD({
   const statusEl = document.getElementById('solverProgress');
   const solutionsEl = document.getElementById('solutionsList');
   let lastReport = null;
+  function levelDtoFromReport(rep){
+    try {
+      const snap = rep && rep.levelSnapshot;
+      if (snap && Array.isArray(snap.tileGrid)){
+        const w = snap.width || (snap.tileGrid[0]?.length|0) || 0;
+        const h = snap.height || (snap.tileGrid.length|0) || 0;
+        const entities = Array.isArray(snap.entities) ? snap.entities.map(e=>({ type: e.type, x: e.x|0, y: e.y|0, orientation: e.orientation })) : [];
+        return { width: w, height: h, tileGrid: snap.tileGrid, entities };
+      }
+    } catch {}
+    return null;
+  }
 
   document.getElementById('runSolver').addEventListener('click', async () => {
     try { console.debug && console.debug('[HUD] Run Solver clicked'); } catch {}
@@ -134,8 +146,8 @@ export function setupHUD({
               btn.addEventListener('click', async () => {
                 const moves = (input.value || '').trim();
                 if (!moves) return;
-                const lvl = (lastReport && lastReport.levelEcho) ? lastReport.levelEcho : null;
-                if (!lvl) { alert('No levelEcho available in last report. Run solver again first.'); return; }
+                const lvl = levelDtoFromReport(lastReport);
+                if (!lvl) { alert('No level snapshot available in last report. Run solver again first.'); return; }
                 try {
                   const rep = await window.api.engineReplayMoves(lvl, moves);
                   console.debug('[ReplayTrace]', rep);
@@ -191,8 +203,8 @@ export function setupHUD({
               let lastAlign = null;
               btn2.addEventListener('click', async () => {
                 const moves = (input2.value || '').trim(); if (!moves) return;
-                const lvl = (lastReport && lastReport.levelEcho) ? lastReport.levelEcho : null;
-                if (!lvl) { alert('No levelEcho available in last report. Run solver again first.'); return; }
+                const lvl = levelDtoFromReport(lastReport);
+                if (!lvl) { alert('No level snapshot available in last report. Run solver again first.'); return; }
                 try {
                   const cfg = { nodesCap: Number(document.getElementById('solverMaxNodes')?.value) || 200000, depthCap: Number(document.getElementById('solverMaxDepth')?.value) || 100, timeCapSeconds: 10.0, enforceTimeCap: false };
                   const res = await window.api.solverTraceAlign(lvl, moves, cfg);
@@ -271,8 +283,8 @@ export function setupHUD({
                   const keyA = (kA.value || '').trim();
                   const keyB = (kB.value || '').trim();
                   if (!keyA || !keyB) { alert('Enter both keyA and keyB in hex'); return; }
-                  const lvl = (lastReport && lastReport.levelEcho) ? lastReport.levelEcho : null;
-                  if (!lvl) { alert('No levelEcho available in last report. Run solver again first.'); return; }
+                    const lvl = levelDtoFromReport(lastReport);
+                    if (!lvl) { alert('No level snapshot available in last report. Run solver again first.'); return; }
                   try {
                     const cfg = { nodesCap: Number(document.getElementById('solverMaxNodes')?.value) || 200000, depthCap: Number(document.getElementById('solverMaxDepth')?.value) || 100, timeCapSeconds: 10.0, enforceTimeCap: false };
                     const res = await window.api.solverFindPathToKey(lvl, keyA, keyB, cfg);
@@ -376,8 +388,8 @@ export function setupHUD({
                 const keyA = (kA.value || '').trim();
                 const keyB = (kB.value || '').trim();
                 if (!keyA || !keyB) { alert('Enter both keyA and keyB in hex'); return; }
-                const lvl = (lastReport && lastReport.levelEcho) ? lastReport.levelEcho : null;
-                if (!lvl) { alert('No levelEcho available in last report. Run solver again first.'); return; }
+                const lvl = levelDtoFromReport(lastReport);
+                if (!lvl) { alert('No level snapshot available in last report. Run solver again first.'); return; }
                 try {
                   const cfg = { nodesCap: Number(document.getElementById('solverMaxNodes')?.value) || 200000, depthCap: Number(document.getElementById('solverMaxDepth')?.value) || 100, timeCapSeconds: 10.0, enforceTimeCap: false };
                   const res = await window.api.solverFindPathToKey(lvl, keyA, keyB, cfg);

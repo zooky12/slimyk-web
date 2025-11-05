@@ -55,7 +55,8 @@ namespace SlimeGrid.Logic
             var tileMask = TraitsUtil.ResolveTileMask(s, p);
             if (s.EntityAt.ContainsKey(p))
             {
-                if ((tileMask & Traits.StopsEntity) != 0) { err = "Entity present; tile stops entities"; cell = old; s.Grid.SetCell(p, cell); return false; }
+                // Allow setting a tile that "sticks" entities even if it also stops them
+                if (((tileMask & Traits.StopsEntity) != 0) && ((tileMask & Traits.SticksEntity) == 0)) { err = "Entity present; tile stops entities"; cell = old; s.Grid.SetCell(p, cell); return false; }
                 if ((tileMask & Traits.HoleForEntity) != 0) { err = "Entity present; tile holes entities"; cell = old; s.Grid.SetCell(p, cell); return false; }
             }
             if (s.PlayerPos.Equals(p))
@@ -81,7 +82,8 @@ namespace SlimeGrid.Logic
 
             if (s.EntityAt.ContainsKey(p)) { err = "Spot occupied"; return false; }
             var tmask = TraitsUtil.ResolveTileMask(s, p);
-            if ((tmask & Traits.StopsEntity) != 0) { err = "Tile blocks entities"; return false; }
+            // Exception: allow spawn on tiles that "stick" entities even if they stop them
+            if (((tmask & Traits.StopsEntity) != 0) && ((tmask & Traits.SticksEntity) == 0)) { err = "Tile blocks entities"; return false; }
             if (s.PlayerPos.Equals(p)) { err = "Player present"; return false; }
 
             var e = EntityCatalog.Spawn(s, type, p);

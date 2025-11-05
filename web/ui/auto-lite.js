@@ -43,6 +43,45 @@ export function setupAutoLiteUI(api) {
   const progressEl = document.getElementById("autoProgress");
   const toggleBtn = document.getElementById("toggleAuto");
   const panelEl = document.getElementById("autoPanel");
+  // Bind collapsible sections (Tiles/Entities/Trace Filters, etc.)
+  try {
+    const bindOne = (btn) => {
+      const targetId = btn.getAttribute('data-target');
+      const panel = targetId ? document.getElementById(targetId) : null;
+      if (!panel) return;
+      // Ensure initial ARIA / display matches markup
+      const initExpanded = btn.getAttribute('aria-expanded') === 'true';
+      panel.classList.toggle('hidden', !initExpanded);
+      panel.setAttribute('aria-hidden', (!initExpanded).toString());
+      if (!initExpanded) panel.style.display = 'none';
+      btn.addEventListener('click', (e) => {
+        try { e.preventDefault(); e.stopPropagation(); } catch {}
+        const expanded = btn.getAttribute('aria-expanded') === 'true';
+        const next = !expanded;
+        btn.setAttribute('aria-expanded', next ? 'true' : 'false');
+        panel.classList.toggle('hidden', !next);
+        panel.setAttribute('aria-hidden', (!next).toString());
+        // Also toggle inline display to be robust against CSS defaults
+        panel.style.display = next ? '' : 'none';
+      });
+    };
+    document.querySelectorAll('.tile-toggle').forEach(bindOne);
+    // Fallback: delegate clicks for late-loaded nodes
+    document.addEventListener('click', (ev) => {
+      const btn = ev.target && ev.target.closest && ev.target.closest('button.tile-toggle');
+      if (!btn) return;
+      const tid = btn.getAttribute('data-target');
+      const pnl = tid && document.getElementById(tid);
+      if (!pnl) return;
+      try { ev.preventDefault(); ev.stopPropagation(); } catch {}
+      const expanded = btn.getAttribute('aria-expanded') === 'true';
+      const next = !expanded;
+      btn.setAttribute('aria-expanded', next ? 'true' : 'false');
+      pnl.classList.toggle('hidden', !next);
+      pnl.setAttribute('aria-hidden', (!next).toString());
+      pnl.style.display = next ? '' : 'none';
+    }, true);
+  } catch {}
 
   // --- helpers
   const nice = (name) =>
@@ -118,6 +157,29 @@ export function setupAutoLiteUI(api) {
       out.push(dirToChar[mv] || "");
     }
     return out.join("");
+  }
+
+  // Fill walls and remove entities outside reachable region (simple passability: non-wall)
+  function fillWallsOnLevel(lvl){
+    try{
+      if (!lvl || !Array.isArray(lvl.tileGrid) || !Array.isArray(lvl.entities)) return lvl;
+      const h = lvl.tileGrid.length|0; const w = h>0 ? (lvl.tileGrid[0]?.length|0) : 0;
+      const grid = lvl.tileGrid;
+      // find player
+      const ps = (lvl.entities||[]).find(e=> e && e.type === 'PlayerSpawn');
+      if (!ps) return lvl;
+      const px = ps.x|0, py = ps.y|0;
+      const passable = (x,y)=> { const name = (grid[y]?.[x]||'Floor').toLowerCase(); return name !== 'wall'; };
+      const seen = Array.from({length:h}, ()=> Array(w).fill(false));
+      const q=[]; if (px>=0&&py>=0&&px<w&&py<h && passable(px,py)) { seen[py][px]=true; q.push({x:px,y:py}); }
+      const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+      while(q.length){ const {x,y}=q.shift(); for (const [dx,dy] of dirs){ const nx=x+dx, ny=y+dy; if(nx<0||ny<0||nx>=w||ny>=h) continue; if (seen[ny][nx]) continue; if (!passable(nx,ny)) continue; seen[ny][nx]=true; q.push({x:nx,y:ny}); } }
+      // fill walls
+      for (let y=0;y<h;y++){ for (let x=0;x<w;x++){ if (!seen[y][x]) grid[y][x] = 'Wall'; } }
+      // remove entities outside
+      lvl.entities = (lvl.entities||[]).filter(e=> e && e.x>=0 && e.y>=0 && e.x<w && e.y<h && seen[e.y][e.x]);
+      return lvl;
+    } catch { return lvl; }
   }
 
   // Cache shortest-solution move strings per base level (keyed by JSON signature)
@@ -636,7 +698,9 @@ export function setupAutoLiteUI(api) {
         const dedupe = { T_sol: 0.12, T_layout: 0.25, w_tiles: 0.4, w_entities: 0.4, w_spatial: 0.2 };
         // Inject derived features pack into context settings
         const derived = DERIVED_DEFAULTS;
-        return { generator: {}, buckets: bucketsCfg, solver, selection, mutation, dedupe, derived };
+        // Trace filters (Top-1)
+        const traceSel = Array.from(document.getElementById('autoTraceRequire')?.selectedOptions || []).map(o => o.value).filter(Boolean);
+        return { generator: {}, buckets: bucketsCfg, solver, selection, mutation, dedupe, derived, traceRequire: traceSel };
       }
       let ctxId = persistentCtxId;
       if (!keep || !ctxId) {
@@ -671,12 +735,15 @@ export function setupAutoLiteUI(api) {
         enforceTimeCap: false,
       };
       const bucketDefs = buckets.slice();
-      const attempts =
+      const targetAccepted =
         Number(document.getElementById("autoAttemptsCount")?.value) || 20;
       const baseChanges = Math.max(1, Number(document.getElementById("autoBaseChanges")?.value) || 1);
       const evolveChanges = Math.max(1, Number(document.getElementById("autoEvolveChanges")?.value) || 1);
       let accum = { sel:0, mut:0, ins:0, sum:0, n:0 };
-      for (let i = 0; i < attempts && !cancel; i++) {
+      let acceptedCount = 0;
+      let tries = 0;
+      while (acceptedCount < targetAccepted && !cancel) {
+        const i = tries; // keep a stable index for logging cadence
         const tAttempt0 = performance.now();
         // Choose base via C# context; fallback to snapshot
         const tSel0 = performance.now();
@@ -705,6 +772,8 @@ export function setupAutoLiteUI(api) {
             if (mu && mu.ok && mu.level) lvl = mu.level;
           } catch {}
         }
+        // Fill walls & drop out-of-reach entities on the candidate before insertion
+        try { lvl = fillWallsOnLevel(lvl); } catch {}
         const tMut1 = performance.now();
         const mutMs = tMut1 - tMut0;
 
@@ -723,7 +792,10 @@ export function setupAutoLiteUI(api) {
         // Insert into C# buckets
         const tIns0 = performance.now();
         if (ctxId) {
-          try { await (ald.aldInsertCandidate ? ald.aldInsertCandidate(ctxId, lvl, cfg) : api.aldInsertCandidate(ctxId, lvl, cfg)); } catch {}
+          try {
+            const ins = await (ald.aldInsertCandidate ? ald.aldInsertCandidate(ctxId, lvl, cfg) : api.aldInsertCandidate(ctxId, lvl, cfg));
+            if (ins && ins.ok && Array.isArray(ins.accepted) && ins.accepted.length > 0) acceptedCount++;
+          } catch {}
         }
         const tIns1 = performance.now();
         const insMs = tIns1 - tIns0;
@@ -731,7 +803,7 @@ export function setupAutoLiteUI(api) {
         let grouped = null;
         const tSum0 = performance.now();
         const refreshEvery = Math.max(1, Number(document.getElementById('autoRefreshEvery')?.value) || 7);
-        if (ctxId && (i % refreshEvery === 0 || i === attempts - 1)) {
+        if (ctxId && (tries % refreshEvery === 0 || acceptedCount >= targetAccepted)) {
           try {
             const sum = await (ald.aldGetBucketsSummary ? ald.aldGetBucketsSummary(ctxId) : api.aldGetBucketsSummary(ctxId));
             if (sum && sum.ok) grouped = sum.buckets;
@@ -740,14 +812,15 @@ export function setupAutoLiteUI(api) {
         const tSum1 = performance.now();
         const sumMs = tSum1 - tSum0;
         accum.sel += selMs; accum.mut += mutMs; accum.ins += insMs; accum.sum += sumMs; accum.n++;
-        if (i % 5 === 0) {
-          console.log(`[auto] attempt ${i + 1}/${attempts} ms sel:${selMs.toFixed(1)} mut:${mutMs.toFixed(1)} ins:${insMs.toFixed(1)} sum:${sumMs.toFixed(1)} avg sel:${(accum.sel/accum.n).toFixed(1)} mut:${(accum.mut/accum.n).toFixed(1)} ins:${(accum.ins/accum.n).toFixed(1)} sum:${(accum.sum/accum.n).toFixed(1)}`);
+        if (tries % 5 === 0) {
+          console.log(`[auto] tries ${tries + 1} accepted:${acceptedCount}/${targetAccepted} ms sel:${selMs.toFixed(1)} mut:${mutMs.toFixed(1)} ins:${insMs.toFixed(1)} sum:${sumMs.toFixed(1)} avg sel:${(accum.sel/accum.n).toFixed(1)} mut:${(accum.mut/accum.n).toFixed(1)} ins:${(accum.ins/accum.n).toFixed(1)} sum:${(accum.sum/accum.n).toFixed(1)}`);
         }
-        if (i % 3 === 0 && progressEl) progressEl.textContent = `Generated ${i + 1}/${attempts}`;
+        if (tries % 3 === 0 && progressEl) progressEl.textContent = `Accepted ${acceptedCount}/${targetAccepted}`;
         if (grouped) renderResultsFromSummary(grouped);
         await new Promise((r) => setTimeout(r, 0));
+        tries++;
       }
-      if (progressEl) progressEl.textContent = cancel ? "Canceled" : "Done";
+      if (progressEl) progressEl.textContent = cancel ? "Canceled" : `Done (accepted ${acceptedCount}/${targetAccepted})`;
     } finally {
       if (runBtn) runBtn.disabled = false;
       if (stopBtn) stopBtn.disabled = true;

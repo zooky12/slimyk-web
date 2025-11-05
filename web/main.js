@@ -735,10 +735,37 @@ setupHUD({
     clearGameStatus();
     requestRedraw();
   },
-  onExport: (name) => {
-    const dto = api.getState(); // DrawDto with numeric ids
-    const out = buildAuthoringLevel(dto, tileIdToName, entIdToName);
-    exportLevel(out, (name || "level.authoring.json").trim());
+  onExport: async (name) => {
+    // Export a full solver report for the current level (reconstructable via levelSnapshot)
+    try {
+      const levelDto = toLevelDTO(api.getState());
+      const cfg = {
+        NodesCap: Number(document.getElementById('solverMaxNodes')?.value) || 200000,
+        DepthCap: Number(document.getElementById('solverMaxDepth')?.value) || 10000,
+        TimeCapSeconds: 10.0,
+        EnforceTimeCap: false,
+        UseBfs: true,
+        EmitTraceTopK: 3,
+        LightReport: false
+      };
+      // Use worker for parity with Run Solver
+      const worker = new Worker(new URL('./workers/ald-worker.js', import.meta.url), { type: 'module' });
+      let nextId = 1; const pending = new Map();
+      const call = (cmd, ...args) => new Promise((resolve, reject) => { const id = nextId++; pending.set(id, { resolve, reject }); worker.postMessage({ id, cmd, args }); });
+      worker.onmessage = (ev) => { const { id, ok, result, error } = ev.data || {}; const p = pending.get(id); if (!p) return; pending.delete(id); ok ? p.resolve(result) : p.reject(new Error(error||'worker_error')); };
+      try { await call('init', { baseUrl: './wasm/' }); } catch {}
+      const report = await call('solverAnalyze', levelDto, cfg);
+      // Ensure snapshot present for reproducibility
+      try { if (!report.levelSnapshot) report.levelSnapshot = { width: levelDto.width||levelDto.w, height: levelDto.height||levelDto.h, hash: '', tileGrid: levelDto.tileGrid, entities: levelDto.entities?.map(e=>({ type: e.type, x: e.x, y: e.y, orientation: e.orientation })) || [] }; } catch {}
+      const fname = (name && name.trim()) ? name.trim() : 'level.solver.json';
+      exportLevel(report, fname);
+      try { worker.terminate(); } catch {}
+    } catch (e) {
+      // Fallback: export authoring level
+      const dto = api.getState();
+      const out = buildAuthoringLevel(dto, tileIdToName, entIdToName);
+      exportLevel(out, (name || 'level.authoring.json').trim());
+    }
   },
 
   onImport: async (file) => {
@@ -793,8 +820,6 @@ setupHUD({
         await call("init", { baseUrl: "./wasm/" });
       } catch {}
       const report = await call("solverAnalyze", levelDto, cfg);
-      // Attach the exact level used to the report for debugging/export
-      try { report.levelEcho = levelDto; } catch {}
       try {
         console.debug && console.debug("Solver report:", report);
       } catch {}
