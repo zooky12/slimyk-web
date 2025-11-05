@@ -281,6 +281,25 @@ export function setupAutoLiteUI(api) {
 
   // --- buckets
   const buckets = [];
+  // Derived features pack injected into ContextSettings.derived
+  // Uses only + - * / ( ) over existing feature ids.
+  const DERIVED_DEFAULTS = [
+    { id: "solUniqueness",  expr: "1 / (solutionsFilteredCount)" },
+    { id: "pruneRatio",     expr: "1 - (solutionsFilteredCount / (solutionsTotalCount + 1))" },
+    { id: "varietyRatio",   expr: "dedupMovesLenTop1 / (solutionLength + 1)" },
+    { id: "backtrackSlack", expr: "solutionLength - dedupMovesLenTop1" },
+    { id: "backtrackRatio", expr: "(solutionLength - dedupMovesLenTop1) / (solutionLength + 1)" },
+    { id: "explorePerStep", expr: "nodesExplored / (solutionLength + 1)" },
+    { id: "exploreCompact", expr: "(solutionLength + 1) / (solutionLength + nodesExplored + 1)" },
+    { id: "depthRatio",     expr: "maxDepthReached / (solutionLength + 1)" },
+    { id: "lureDensity",    expr: "deadEndsNearTop1Count / (solutionLength + 1)" },
+    { id: "deadEndDensity", expr: "deadEndsCount / (nodesExplored + 1)" },
+    { id: "boxFocusRatio",  expr: "stepsInBoxTop1 / (solutionLength + 1)" },
+    { id: "freeFocusRatio", expr: "stepsFreeTop1 / (solutionLength + 1)" },
+    { id: "pathDiversity",  expr: "dedupMovesLenTop3Avg / (dedupMovesLenTop1 + 1)" },
+    { id: "uncapped",       expr: "1 - capped" }
+    // Note: intentionally omitting { id:"exitOk", expr:"precheck.hasExitInComponent" }
+  ];
   const BUCKET_PRESETS = {
     // Full C# BucketConfig JSON defaults
     Easy: JSON.stringify({
@@ -321,6 +340,95 @@ export function setupAutoLiteUI(api) {
         { id: "solutionsFilteredCount", mode: "Band", bandMin: 1, bandMax: 3, weight: 1, hard: false },
         { id: "deadEndsNearTop1Count", mode: "Infinite", bandMin: 0, bandMax: 0, weight: 0.3, hard: false },
         { id: "deadEndsAverageDepth", mode: "Infinite", bandMin: 0, bandMax: 0, weight: 0.1, hard: false }
+      ]
+    }, null, 2),
+    "Tutorial / Flow": JSON.stringify({
+      name: "Tutorial / Flow",
+      topK: 20,
+      features: [
+        { id: "precheck.hasExitInComponent", mode: "Band", bandMin: 1, bandMax: 1, weight: 0,   hard: true },
+        { id: "solutionLength",              mode: "Band", bandMin: 8, bandMax: 20, weight: 1,   hard: true },
+        { id: "exploreCompact",              mode: "Infinite",                                   weight: 0.5, hard: false },
+        { id: "deadEndsCount",               mode: "Band", bandMin: 0, bandMax: 3,  weight: 0.4, hard: false },
+        { id: "lureDensity",                 mode: "Band", bandMin: 0, bandMax: 0.15, weight: 0.4, hard: false },
+        { id: "varietyRatio",                mode: "Band", bandMin: 0.75, bandMax: 1, weight: 0.3, hard: false },
+        { id: "solUniqueness",               mode: "Infinite",                                   weight: 0.4, hard: false }
+      ]
+    }, null, 2),
+    "Aha / Search-Heavy": JSON.stringify({
+      name: "Aha / Search-Heavy",
+      topK: 20,
+      features: [
+        { id: "solutionLength",   mode: "Band", bandMin: 12, bandMax: 28, weight: 1,   hard: true },
+        { id: "explorePerStep",   mode: "Infinite",                                   weight: 0.4, hard: false },
+        { id: "lureDensity",      mode: "Band", bandMin: 0.2, bandMax: 0.6, weight: 0.6, hard: false },
+        { id: "backtrackRatio",   mode: "Band", bandMin: 0,   bandMax: 0.2, weight: 0.4, hard: false },
+        { id: "deadEndDensity",   mode: "Band", bandMin: 0.05, bandMax: 0.3, weight: 0.2, hard: false }
+      ]
+    }, null, 2),
+    "Maze / Spiky": JSON.stringify({
+      name: "Maze / Spiky",
+      topK: 20,
+      features: [
+        { id: "solutionLength",      mode: "Band", bandMin: 30, bandMax: 60, weight: 1,   hard: true },
+        { id: "deadEndsCount",       mode: "Infinite",                                   weight: 0.3, hard: false },
+        { id: "deadEndsAverageDepth",mode: "Infinite",                                   weight: 0.5, hard: false },
+        { id: "deadEndDensity",      mode: "Infinite",                                   weight: 0.3, hard: false },
+        { id: "exploreCompact",      mode: "Band", bandMin: 0.2, bandMax: 0.6, weight: 0.2, hard: false }
+      ]
+    }, null, 2),
+    "Backtrack Gym": JSON.stringify({
+      name: "Backtrack Gym",
+      topK: 20,
+      features: [
+        { id: "solutionLength",  mode: "Band", bandMin: 25, bandMax: 60, weight: 1,   hard: true },
+        { id: "backtrackRatio",  mode: "Band", bandMin: 0.25, bandMax: 0.6, weight: 0.6, hard: false },
+        { id: "varietyRatio",    mode: "Band", bandMin: 0.4,  bandMax: 0.75, weight: 0.3, hard: false },
+        { id: "explorePerStep",  mode: "Band", bandMin: 0.1,  bandMax: 0.6,  weight: 0.2, hard: false }
+      ]
+    }, null, 2),
+    "Boxy / Sokoban-ish": JSON.stringify({
+      name: "Boxy / Sokoban-ish",
+      topK: 20,
+      features: [
+        { id: "solutionLength",  mode: "Band", bandMin: 30, bandMax: 70, weight: 1,   hard: true },
+        { id: "boxFocusRatio",   mode: "Band", bandMin: 0.5, bandMax: 0.8, weight: 0.8, hard: false },
+        { id: "freeFocusRatio",  mode: "Band", bandMin: 0.1, bandMax: 0.4, weight: 0.3, hard: false },
+        { id: "solUniqueness",   mode: "Infinite",                                   weight: 0.2, hard: false },
+        { id: "deadEndsNearTop1Count", mode: "Band", bandMin: 0, bandMax: 5, weight: 0.2, hard: false }
+      ]
+    }, null, 2),
+    "Multi-Route / Sandbox": JSON.stringify({
+      name: "Multi-Route / Sandbox",
+      topK: 20,
+      features: [
+        { id: "solutionLength",         mode: "Band", bandMin: 25, bandMax: 60, weight: 1,   hard: true },
+        { id: "solutionsFilteredCount", mode: "Band", bandMin: 2,  bandMax: 5,  weight: 1,   hard: false },
+        { id: "pathDiversity",          mode: "Band", bandMin: 0.9,bandMax: 1.2,weight: 0.4, hard: false },
+        { id: "deadEndDensity",         mode: "Band", bandMin: 0,  bandMax: 0.2,weight: 0.3, hard: false },
+        { id: "varietyRatio",           mode: "Band", bandMin: 0.6,bandMax: 0.9,weight: 0.3, hard: false }
+      ]
+    }, null, 2),
+    "Corridor / Linear": JSON.stringify({
+      name: "Corridor / Linear",
+      topK: 20,
+      features: [
+        { id: "solutionLength",   mode: "Band", bandMin: 40, bandMax: 80, weight: 1,   hard: true },
+        { id: "deadEndsCount",    mode: "Band", bandMin: 0,  bandMax: 3,  weight: 0.5, hard: false },
+        { id: "deadEndDensity",   mode: "Band", bandMin: 0,  bandMax: 0.05,weight: 0.8,hard: true },
+        { id: "exploreCompact",   mode: "Infinite",                                   weight: 0.5, hard: false },
+        { id: "solUniqueness",    mode: "Infinite",                                   weight: 0.4, hard: false }
+      ]
+    }, null, 2),
+    "Epic (Uncapped)": JSON.stringify({
+      name: "Epic (Uncapped)",
+      topK: 0,
+      features: [
+        { id: "solutionLength", mode: "Band", bandMin: 70, bandMax: 99999, weight: 1,   hard: true },
+        { id: "uncapped",       mode: "Band", bandMin: 1,  bandMax: 1,     weight: 0,   hard: true },
+        { id: "explorePerStep", mode: "Band", bandMin: 0.2,bandMax: 1,     weight: 0.3, hard: false },
+        { id: "deadEndDensity", mode: "Band", bandMin: 0.05,bandMax: 0.2,  weight: 0.3, hard: false },
+        { id: "varietyRatio",   mode: "Band", bandMin: 0.5,bandMax: 0.8,   weight: 0.4, hard: false }
       ]
     }, null, 2)
   };
@@ -526,7 +634,9 @@ export function setupAutoLiteUI(api) {
         // Move player only if PlayerSpawn is allowed
         if (entsSel && entsSel.length) mutation.movePlayer = entsSel.includes('PlayerSpawn');
         const dedupe = { T_sol: 0.12, T_layout: 0.25, w_tiles: 0.4, w_entities: 0.4, w_spatial: 0.2 };
-        return { generator: {}, buckets: bucketsCfg, solver, selection, mutation, dedupe };
+        // Inject derived features pack into context settings
+        const derived = DERIVED_DEFAULTS;
+        return { generator: {}, buckets: bucketsCfg, solver, selection, mutation, dedupe, derived };
       }
       let ctxId = persistentCtxId;
       if (!keep || !ctxId) {
