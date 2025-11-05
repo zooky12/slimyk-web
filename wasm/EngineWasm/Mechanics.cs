@@ -42,7 +42,7 @@ namespace SlimeGrid.Logic
             // Early prechecks
             if ((TraitsUtil.ResolveEffectiveMask(s, firstPos) & Traits.SticksEntity) != 0) return false;
             if ((TraitsUtil.ResolveEffectiveMask(s, lastNext) & Traits.StopsEntity) != 0) return false;
-            if ((TraitsUtil.ResolveTileMask(s, firstPos) & Traits.Slipery) != 0 && chain.Count > 1) return false;
+            if ((TraitsUtil.ResolveTileMask(s, firstPos) & Traits.SlipperyForEntity) != 0 && chain.Count > 1) return false;
 
             // Validate from back to front
             bool blocked = false;
@@ -85,7 +85,7 @@ namespace SlimeGrid.Logic
                 return false;
             }
             // If current tile is Slippery => defer to PushChain
-            if ((TraitsUtil.ResolveEffectiveMask(s, cur) & Traits.Slipery) != 0)
+            if ((TraitsUtil.ResolveEffectiveMask(s, cur) & Traits.SlipperyForEntity) != 0)
                 return PushChain(s, entityId, d, outRes);
 
             // If next tile stops entity => fail
@@ -100,7 +100,7 @@ namespace SlimeGrid.Logic
                 return PushChain(s, entityId, d, outRes);
 
             // If next is Slippery => tumble once, then push chain forward
-            if ((TraitsUtil.ResolveEffectiveMask(s, to) & Traits.Slipery) != 0)
+            if ((TraitsUtil.ResolveEffectiveMask(s, to) & Traits.SlipperyForEntity) != 0)
             {
                 DoTumble(s, entityId, d, outRes);
                 return PushChain(s, entityId, d, outRes);
@@ -254,7 +254,7 @@ namespace SlimeGrid.Logic
 
             if (TraitsUtil.TileStopsEntity(s, cur) || s.TryGetEntityAt(cur) is not null) return pos;
 
-            while (TraitsUtil.TileIsSlippery(s, cur) &&
+            while (TraitsUtil.TileIsSlipperyForEntity(s, cur) &&
                    !TraitsUtil.TileStopsEntity(s, cur + v) &&
                    s.TryGetEntityAt(cur + v) is null)
             {
@@ -270,7 +270,7 @@ namespace SlimeGrid.Logic
 
             if (TraitsUtil.TileStopsPlayer(s, cur)) return pos;
 
-            while (TraitsUtil.TileIsSlippery(s, cur)
+            while (TraitsUtil.TileIsSlipperyForPlayer(s, cur)
                    && !s.HasEntityAt(cur)
                    && !TraitsUtil.TileStopsPlayer(s, cur + v))
             {

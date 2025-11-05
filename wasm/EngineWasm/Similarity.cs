@@ -68,7 +68,7 @@ namespace SlimeGrid.Tools.ALD
                     Acc(d, "SF", (m & Traits.StopsFlight) != 0);
                     Acc(d, "ST", (m & Traits.StopsTumble) != 0);
                     Acc(d, "HO", (m & Traits.HoleForPlayer) != 0 || (m & Traits.HoleForEntity) != 0);
-                    Acc(d, "SL", (m & Traits.Slipery) != 0);
+                    Acc(d, "SL", (m & (Traits.SlipperyForPlayer | Traits.SlipperyForEntity)) != 0);
                     Acc(d, "EX", (m & Traits.ExitPlayer) != 0);
                     Acc(d, "BT", (m & Traits.ButtonToggle) != 0);
                     Acc(d, "BA", (m & Traits.ButtonAllowExit) != 0);

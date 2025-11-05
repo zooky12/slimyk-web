@@ -30,7 +30,9 @@ namespace SlimeGrid.Logic
         public static bool TileStopsTumble(GameState s, V2 p) => (ResolveEffectiveMask(s, p) & Traits.StopsTumble) != 0;
         public static bool TileStopsFlight(GameState s, V2 p) => (ResolveEffectiveMask(s, p) & Traits.StopsFlight) != 0;
         public static bool TileSticksFlight(GameState s, V2 p) => (ResolveEffectiveMask(s, p) & Traits.SticksFlight) != 0;
-        public static bool TileIsSlippery(GameState s, V2 p) => (ResolveEffectiveMask(s, p) & Traits.Slipery) != 0;
+        public static bool TileIsSlipperyForPlayer(GameState s, V2 p) => (ResolveEffectiveMask(s, p) & Traits.SlipperyForPlayer) != 0;
+        public static bool TileIsSlipperyForEntity(GameState s, V2 p) => (ResolveEffectiveMask(s, p) & Traits.SlipperyForEntity) != 0;
+        // Back-compat helper (treat as slippery for either)
+        public static bool TileIsSlippery(GameState s, V2 p) => (ResolveEffectiveMask(s, p) & (Traits.SlipperyForPlayer | Traits.SlipperyForEntity)) != 0;
     }
 }
-

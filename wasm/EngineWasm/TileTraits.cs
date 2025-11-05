@@ -37,11 +37,11 @@ namespace SlimeGrid.Logic
         public static readonly TT BtnAllow = TT.Of(ButtonAllowExit);
         public static readonly TT BtnToggle = TT.Of(ButtonToggle);
 
-        // Ice variants = base | Slipery
-        public static readonly TT Ice = TT.Of(Slipery);
-        public static readonly TT IceSpike = TT.Of(Spike.Active | Ice.Active, toggledTo: TileType.InactiveIceSpike);
+        // Ice variants = base | SlipperyForPlayer | SlipperyForEntity
+        public static readonly TT Ice = TT.Of(SlipperyForPlayer | SlipperyForEntity);
+        public static readonly TT IceSpike = TT.Of(Spike.Active | Ice.Active ^ SlipperyForPlayer, toggledTo: TileType.InactiveIceSpike);
         public static readonly TT InactiveIceSpike = TT.Of(InactiveSpike.Active | Ice.Active, toggledTo: TileType.IceSpike);
-        public static readonly TT IceGrill = Grill | Ice.Active;
+        public static readonly TT IceGrill = Grill | Ice.Active ^ SlipperyForPlayer;
         public static readonly TT IceSlimPath = SlimPath | Ice.Active;
         public static readonly TT IceExit = ExitTile | Ice.Active;
 

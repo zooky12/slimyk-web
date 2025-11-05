@@ -170,7 +170,7 @@ namespace SlimeGrid.Tools.ALD
             if (required == null || required.Count == 0) return true;
 
             // Scan tiles: compute presence flags by traits
-            bool hasSlipery = false;
+            bool hasSlipperyPlayer = false;
             bool hasButtonToggle = false;
             bool hasButtonAllowExit = false;
             bool hasExitTile = false;
@@ -186,7 +186,7 @@ namespace SlimeGrid.Tools.ALD
                         var name = row[x] ?? TileType.Floor.ToString();
                         if (!Enum.TryParse<TileType>(name, true, out var T)) continue;
                         var traits = TileTraits.For(T).Active;
-                        if ((traits & Traits.Slipery) != 0) hasSlipery = true;
+                        if ((traits & Traits.SlipperyForPlayer) != 0) hasSlipperyPlayer = true;
                         if ((traits & Traits.ButtonToggle) != 0) hasButtonToggle = true;
                         if ((traits & Traits.ButtonAllowExit) != 0) hasButtonAllowExit = true;
                         if ((traits & Traits.ExitPlayer) != 0) hasExitTile = true;
@@ -232,7 +232,7 @@ namespace SlimeGrid.Tools.ALD
                     case "OrientChange_TriBox": if (!hasBoxTriangle) return false; break;
                     case "SlideStart_Player":
                     case "SlideStep_Player":
-                    case "SlideEnd_Player": if (!hasSlipery) return false; break;
+                    case "SlideEnd_Player": if (!hasSlipperyPlayer) return false; break;
                     case "PlatePress":
                     case "PlateRelease": if (!hasButtonToggle) return false; break;
                     case "ExitOpen":

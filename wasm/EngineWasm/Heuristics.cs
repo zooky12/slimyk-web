@@ -28,7 +28,7 @@ namespace SlimeGrid.Tools.ALD
             static List<string> TraitTags(ulong m)
             {
                 var tags = new List<string>(8);
-                if (((m & (ulong)SlimeGrid.Logic.Traits.Slipery) != 0)) tags.Add("OnSlipery");
+                if (((m & (ulong)(SlimeGrid.Logic.Traits.SlipperyForPlayer | SlimeGrid.Logic.Traits.SlipperyForEntity)) != 0)) tags.Add("OnSlipery");
                 if (((m & (ulong)SlimeGrid.Logic.Traits.HoleForPlayer) != 0)) tags.Add("HazardForPlayer");
                 if (((m & (ulong)SlimeGrid.Logic.Traits.HoleForEntity) != 0)) tags.Add("HazardForEntity");
                 if (((m & (ulong)SlimeGrid.Logic.Traits.ButtonToggle) != 0)) tags.Add("IsButtonToggle");

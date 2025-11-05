@@ -99,7 +99,8 @@ namespace SlimeGrid.Logic
         SticksFlight = 1UL << 3,
         SticksEntity = 1UL << 4,
         StopsTumble = 1UL << 5,
-        Slipery = 1UL << 6,  // ice-like slip
+        SlipperyForPlayer = 1UL << 6,
+        SlipperyForEntity = 1UL << 7,
 
         // Holes (8..15)
         HoleForEntity = 1UL << 8,  // (renamed from HoleForBox)
