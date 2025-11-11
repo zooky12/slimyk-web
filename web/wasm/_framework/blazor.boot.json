@@ -1,7 +1,7 @@
 {
   "mainAssemblyName": "EngineWasm.dll",
   "resources": {
-    "hash": "sha256-F/BIPUmMaK/eJjaIxAxiLkDxzPnGydbhbfXZSSc45nk=",
+    "hash": "sha256-/aZKNHO+bufnwgQ1q4KXnaTbffp+mL8rfm32204wT2E=",
     "jsModuleNative": {
       "dotnet.native.js": "sha256-UxH441EUZyhSu8o0TVcLYDukoFpogFqpjhTE9XFcFTk="
     },
@@ -184,7 +184,7 @@
       "mscorlib.wasm": "sha256-MZJ1V6miMP318lQowft4FPkcszcibPLDTwKj235fSAc=",
       "netstandard.wasm": "sha256-RYAURbR1AHkUZYjKgu+B/i3N3VP4abnAaH+vxwJ8d3c=",
       "System.Private.CoreLib.wasm": "sha256-4YzdATaWUDkUkRpe+hl+T61TaCjRVapVUtqTIai3Gd8=",
-      "EngineWasm.wasm": "sha256-syeYIqqoGcrjrLEKBSOCAfZAEphelDbpy0AhUL0/GZ0="
+      "EngineWasm.wasm": "sha256-ZAQUzCaNmhDBjHQsZ586PjCI3+73z8iI+2hPgt2kfxo="
     },
     "vfs": {
       "runtimeconfig.bin": {

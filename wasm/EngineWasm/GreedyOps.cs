@@ -131,6 +131,29 @@ namespace SlimeGrid.Tools.ALD
                         if (!Enum.TryParse<TileType>(name, ignoreCase: true, out var tt)) continue;
                         // Skip if unchanged
                         if (seed.Grid.CellRef(new V2(x, y)).Type == tt) continue;
+                        // Inverse occupancy check: avoid placing blocking tiles beneath occupants
+                        try
+                        {
+                            bool hasPlayerHere = false;
+                            bool hasOtherEntityHere = false;
+                            foreach (var e in seedDto.entities ?? new System.Collections.Generic.List<EntityDTO>())
+                            {
+                                if (e == null) continue;
+                                if (e.x == x && e.y == y)
+                                {
+                                    if (e.type == EntityType.PlayerSpawn) hasPlayerHere = true; else hasOtherEntityHere = true;
+                                }
+                            }
+                            if (hasPlayerHere || hasOtherEntityHere)
+                            {
+                                var traitsNew = TileTraits.For(tt).Active;
+                                if (hasPlayerHere && ((traitsNew & Traits.StopsPlayer) != 0 || (traitsNew & Traits.HoleForPlayer) != 0))
+                                    continue;
+                                if (hasOtherEntityHere && ((traitsNew & Traits.StopsEntity) != 0 || (traitsNew & Traits.HoleForEntity) != 0))
+                                    continue;
+                            }
+                        }
+                        catch { }
                         var testDto = CloneDTO(seedDto);
                         EnsureGridInitialized(testDto);
                         testDto.tileGrid[y][x] = tt.ToString();
