@@ -65,6 +65,42 @@ export function setupAutoLiteUI(api) {
   const previewPanel = document.getElementById("autoPreview");
   const previewCanvas = document.getElementById("autoPreviewCanvas");
   const previewInfo = document.getElementById("autoPreviewInfo");
+  // Preview config controls (interval + refresh-on-show)
+  try {
+    if (previewPanel && !previewPanel.dataset.previewControlsBound) {
+      previewPanel.dataset.previewControlsBound = "1";
+      const ctrl = document.createElement("div");
+      ctrl.className = "levels-row";
+      // Interval input
+      const lblEvery = document.createElement("label");
+      lblEvery.textContent = "Preview every";
+      lblEvery.style.marginRight = "8px";
+      const inpEvery = document.createElement("input");
+      inpEvery.type = "number";
+      inpEvery.min = "1";
+      inpEvery.step = "1";
+      inpEvery.id = "autoPreviewEvery";
+      inpEvery.title = "Show preview after this many candidates";
+      inpEvery.style.width = "72px";
+      // Default of 10 to match previous behavior
+      if (!inpEvery.value) inpEvery.value = "10";
+      // Refresh checkbox
+      const lblRefresh = document.createElement("label");
+      lblRefresh.style.marginLeft = "16px";
+      const cbRefresh = document.createElement("input");
+      cbRefresh.type = "checkbox";
+      cbRefresh.id = "autoPreviewRefreshAfter";
+      cbRefresh.style.marginRight = "6px";
+      lblRefresh.appendChild(cbRefresh);
+      lblRefresh.appendChild(document.createTextNode("Refresh candidate after showing"));
+      // Assemble
+      ctrl.appendChild(lblEvery);
+      ctrl.appendChild(inpEvery);
+      ctrl.appendChild(lblRefresh);
+      // Insert controls near top of preview panel
+      try { previewPanel.insertBefore(ctrl, previewPanel.firstChild); } catch { previewPanel.appendChild(ctrl); }
+    }
+  } catch {}
   // Bind the Auto panel toggle ASAP so the button always works
   try {
     if (toggleBtn && panelEl && toggleBtn.dataset.bound !== "1") {
@@ -2040,6 +2076,14 @@ export function setupAutoLiteUI(api) {
                 grid: maskState.grid.map((r) => r.slice()),
               }
             : null;
+        // Freeze preview controls
+        const frozenPreviewEvery = Math.max(
+          1,
+          Number(document.getElementById("autoPreviewEvery")?.value) || 10
+        );
+        const frozenPreviewRefresh = !!document.getElementById(
+          "autoPreviewRefreshAfter"
+        )?.checked;
         let accum = { sel: 0, mut: 0, ins: 0, sum: 0, n: 0 };
         let acceptedCount = 0;
         let consecutiveMisses = 0;
@@ -2223,10 +2267,10 @@ export function setupAutoLiteUI(api) {
           }
           const tIns1 = performance.now();
           const insMs = tIns1 - tIns0;
-          // Preview draw every 10 tries when panel is open
+          // Preview draw based on interval when panel is open
           try {
             if (
-              tries % 10 === 0 &&
+              tries % frozenPreviewEvery === 0 &&
               previewPanel &&
               previewPanel.getAttribute("aria-hidden") === "false" &&
               previewCanvas
@@ -2252,6 +2296,11 @@ export function setupAutoLiteUI(api) {
                   previewInfo.textContent = `Best shortest steps: ${
                     bestPreviewFastest >= 0 ? bestPreviewFastest : "-"
                   }`;
+                // Optionally refresh preview candidate after showing
+                if (frozenPreviewRefresh) {
+                  bestPreviewLevel = null;
+                  bestPreviewFastest = -1;
+                }
               }
             }
           } catch {}
@@ -2496,6 +2545,10 @@ export function setupAutoLiteUI(api) {
               Number(document.getElementById("autoGreedyRatio")?.value) || 0,
             refreshEvery:
               Number(document.getElementById("autoRefreshEvery")?.value) || 7,
+            previewEvery:
+              Number(document.getElementById("autoPreviewEvery")?.value) || 10,
+            previewRefreshAfter:
+              !!document.getElementById("autoPreviewRefreshAfter")?.checked,
           },
           tiles: { allowed: tilesAllowed, counts: tileCounts },
           entities: { allowed: entsAllowed, counts: entityCounts },
@@ -2606,6 +2659,9 @@ export function setupAutoLiteUI(api) {
         setVal("autoBaseUseRatio", obj.parameters?.baseUseRatio);
         setVal("autoGreedyRatio", obj.parameters?.greedyRatio);
         setVal("autoRefreshEvery", obj.parameters?.refreshEvery);
+        setVal("autoPreviewEvery", obj.parameters?.previewEvery);
+        const cbPrev = document.getElementById("autoPreviewRefreshAfter");
+        if (cbPrev) cbPrev.checked = !!obj.parameters?.previewRefreshAfter;
         const traceSel = document.getElementById("autoTraceRequire");
         if (traceSel) {
           const wanted = new Set(obj.traceRequire || []);
