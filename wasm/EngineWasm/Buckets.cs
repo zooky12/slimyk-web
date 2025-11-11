@@ -22,12 +22,13 @@ namespace SlimeGrid.Tools.ALD
             {
                 if (rejectCand) return false; // worse than existing; do not insert
             }
-            // If topK <= 0, treat as unlimited capacity
-            if (Config.topK <= 0)
+            int cap = Config.maxLevels;
+            // If capacity <= 0, treat as unlimited capacity
+            if (cap <= 0)
             {
                 heap.Add(cand); HeapUp(heap.Count - 1); return true;
             }
-            if (heap.Count < Config.topK)
+            if (heap.Count < cap)
             {
                 heap.Add(cand); HeapUp(heap.Count - 1); return true;
             }
@@ -127,6 +128,37 @@ namespace SlimeGrid.Tools.ALD
                 var B = cand.report.topSolutions.Count > 0 ? Unpack(cand.report.topSolutions[0]) : default;
                 float solSim = Similarity.SolutionSimilarity(A, B);
                 if (solSim > (float)(global?.T_sol ?? Config.T_sol)) continue; // keep both, don't test layout
+
+                // Cheap equality check first: identical tiles and entities ignoring PlayerSpawn => treat as too-similar
+                try
+                {
+                    bool SameTiles(LevelDTO a, LevelDTO b)
+                    {
+                        var ga = a.tileGrid; var gb = b.tileGrid;
+                        if (ga == null || gb == null) return false; if (ga.Length != gb.Length) return false;
+                        for (int y = 0; y < ga.Length; y++)
+                        { var ra = ga[y]; var rb = gb[y]; if (ra == null || rb == null || ra.Length != rb.Length) return false; for (int x = 0; x < ra.Length; x++) if (!string.Equals(ra[x], rb[x], System.StringComparison.OrdinalIgnoreCase)) return false; }
+                        return true;
+                    }
+                    bool SameEntitiesIgnoringPlayer(LevelDTO a, LevelDTO b)
+                    {
+                        var la = new System.Collections.Generic.List<SlimeGrid.Logic.EntityDTO>(a.entities ?? new System.Collections.Generic.List<SlimeGrid.Logic.EntityDTO>());
+                        var lb = new System.Collections.Generic.List<SlimeGrid.Logic.EntityDTO>(b.entities ?? new System.Collections.Generic.List<SlimeGrid.Logic.EntityDTO>());
+                        la.RemoveAll(e => e == null || e.type == SlimeGrid.Logic.EntityType.PlayerSpawn);
+                        lb.RemoveAll(e => e == null || e.type == SlimeGrid.Logic.EntityType.PlayerSpawn);
+                        if (la.Count != lb.Count) return false;
+                        var ma = new System.Collections.Generic.Dictionary<string,int>(System.StringComparer.Ordinal);
+                        foreach (var e in la) { var k = $"{e.type}:{e.x}:{e.y}"; ma.TryGetValue(k, out var c); ma[k]=c+1; }
+                        foreach (var e in lb) { var k = $"{e.type}:{e.x}:{e.y}"; if (!ma.TryGetValue(k,out var c) || c==0) return false; ma[k]=c-1; }
+                        foreach (var kv in ma) if (kv.Value != 0) return false; return true;
+                    }
+                    if (SameTiles(item.dto, cand.dto) && SameEntitiesIgnoringPlayer(item.dto, cand.dto))
+                    {
+                        // Equivalent layouts ignoring player: accept only if candidate scores higher
+                        return cand.normalizedScore > item.normalizedScore;
+                    }
+                }
+                catch { }
 
                 // Otherwise test layout similarity on full mask with global weights
                 var levelA = SlimeGrid.Logic.Loader.FromDTO(item.dto);

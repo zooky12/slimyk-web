@@ -1,0 +1,374 @@
+using System.Collections.Generic;
+using SlimeGrid.Logic.Animation;
+
+namespace SlimeGrid.Logic
+{
+    public static class Mechanics
+    {
+        static bool InB(GameState s, V2 p) => s.Grid.InBounds(p);
+        static V2 Next(V2 p, Dir d) => p + d.Vec();
+
+        // -------------------- SLIDE (player) --------------------
+        public static bool Slide(GameState s, Dir d, StepResult outRes)
+        {
+            if (!CanSlidePlayer(s, d)) return false;
+
+            var from = s.PlayerPos;
+            var to = TraceSlidePlayer(s, from, d);
+            if (to.Equals(from)) return false; // paranoia guard
+
+            s.PlayerPos = to;
+            Anim.PlayerMove(outRes, from, to, d, "slide");
+            return true;
+        }
+
+        private static bool CanSlidePlayer(GameState s, Dir d)
+        {
+            if (s.AttachedEntityId is not null) return false;
+            var v = d.Vec();
+            var next = s.PlayerPos + v;
+
+            if (TraitsUtil.TileStopsPlayer(s, next)) return false;
+            if (!TraitsUtil.TileIsSlipperyForPlayer(s, next)) return false;
+            // Allow sliding into an attachable entity (will attach in ResolveState)
+            if (s.EntityAt.TryGetValue(next, out var eid))
+            {
+                var e = s.EntitiesById[eid];
+                // If not attachable, treat as blocked
+                if ((e.Traits & Traits.Attachable) == 0) return false;
+            }
+
+            return true;
+        }
+
+        private static V2 TraceSlidePlayer(GameState s, V2 pos, Dir d)
+        {
+            // PRE: next tile is slippery & not blocked
+            var v = d.Vec();
+            var cur = pos + v;
+
+            // If the very first cell holds an attachable entity, stop and attach there
+            if (s.EntityAt.TryGetValue(cur, out var firstId))
+            {
+                var fe = s.EntitiesById[firstId];
+                if ((fe.Traits & Traits.Attachable) != 0) return cur;
+            }
+
+            while (TraitsUtil.TileIsSlipperyForPlayer(s, cur)
+                   && !TraitsUtil.TileStopsPlayer(s, cur + v))
+            {
+                var nxt = cur + v;
+                if (s.EntityAt.TryGetValue(nxt, out var id))
+                {
+                    var e = s.EntitiesById[id];
+                    // Land on attachable entity; otherwise stop before it
+                    if ((e.Traits & Traits.Attachable) != 0) return nxt;
+                    break;
+                }
+                cur = nxt;
+            }
+            return cur;
+        }
+
+        // -------------------- SLIDE ENTITY (single entity only) --------------------
+        public static bool SlideEntity(GameState s, int entityId, Dir d, StepResult outRes)
+        {
+            if (!CanSlideEntity(s, entityId, d)) return false;
+
+            var from = s.EntitiesById[entityId].Pos;
+            var to = TraceSlideEntity(s, entityId, d);
+            if (to.Equals(from)) return false;
+
+            EntityMovement(s, from, to, outRes, entityId, "slide");
+            return true;
+        }
+
+        private static bool CanSlideEntity(GameState s, int entityId, Dir d)
+        {
+            var v = d.Vec();
+            var cur = s.EntitiesById[entityId].Pos;
+            var next = cur + v;
+
+            if (TraitsUtil.TileStopsEntity(s, next)) return false;
+            if (s.TryGetEntityAt(next) is not null) return false;
+            return TraitsUtil.TileIsSlipperyForEntity(s, next);
+        }
+
+        private static V2 TraceSlideEntity(GameState s, int entityId, Dir d)
+        {
+            var v = d.Vec();
+            var cur = s.EntitiesById[entityId].Pos + v;
+
+            while (TraitsUtil.TileIsSlipperyForEntity(s, cur)
+                   && s.TryGetEntityAt(cur + v) is null
+                   && !TraitsUtil.TileStopsEntity(s, cur + v))
+            {
+                cur += v;
+            }
+            return cur;
+        }
+
+        // -------------------- WALK (tile-first; single MoveStraight) --------------------
+        public static bool Walk(GameState s, Dir d, StepResult outRes)
+        {
+            // Only slide when the next tile is slippery; otherwise fall back to a step.
+            if (Slide(s, d, outRes)) return true;
+            if (DoPlayerStep(s, d, outRes)) return true;
+            return false;
+        }
+
+        // -------------------- PUSH CHAIN (tile-first; validate every step) -------------
+        public static bool PushChain(GameState s, int rootEntityId, Dir d, StepResult outRes)
+        {
+            // Build contiguous pushable chain
+            var chain = new List<int>();
+            var cur = s.EntitiesById[rootEntityId].Pos;
+
+            while (s.EntityAt.TryGetValue(cur, out var id))
+            {
+                if ((s.EntitiesById[id].Traits & Traits.Pushable) == 0) break;
+                chain.Add(id);
+                cur += d.Vec();
+            }
+
+            // Early precheck: empty
+            if (chain.Count == 0) return false;
+
+            var first = chain[0];
+            var last = chain[chain.Count - 1];
+
+            var firstPos = s.EntitiesById[first].Pos;
+            var lastNext = s.EntitiesById[last].Pos + d.Vec();
+
+            // Early prechecks
+            if ((TraitsUtil.ResolveEffectiveMask(s, firstPos) & Traits.SticksEntity) != 0) return false;
+            if ((TraitsUtil.ResolveEffectiveMask(s, lastNext) & Traits.StopsEntity) != 0) return false;
+            if ((TraitsUtil.ResolveTileMask(s, firstPos) & Traits.SlipperyForEntity) != 0 && chain.Count > 1) return false;
+
+            // Validate from back to front
+            bool blocked = false;
+            for (int i = chain.Count - 1; i >= 0; i--)
+            {
+                var eid = chain[i];                         // FIX: use chain[i], not i
+                var pos = s.EntitiesById[eid].Pos;
+                var mask = TraitsUtil.ResolveEffectiveMask(s, pos);
+                if (blocked || (mask & Traits.StopsEntity) != 0 || (mask & Traits.SticksEntity) != 0)
+                {
+                    outRes.Add(new Blocked(Actor.Entity, Verb.PushChain, d, pos, BlockReason.TileStopsEntity));
+                    Anim.Bump(outRes, pos);
+                    blocked = true;
+                }
+            }
+
+            if (blocked) return false;
+
+            // Execute (back to front to avoid clobber)
+            for (int i = chain.Count - 1; i >= 0; i--)
+            {
+                var eid = chain[i];
+                // If it's a single-entity push and it can slide, do the full slide; otherwise 1-step push.
+                if (chain.Count == 1 && SlideEntity(s, eid, d, outRes))
+                    continue;
+                DoEntityPushStep(s, eid, d, outRes);
+            }
+            return true;
+        }
+
+        // -------------------- TUMBLE (tile-first; no push fallback here) --------------
+        public static bool Tumble(GameState s, int entityId, Dir d, StepResult outRes)
+        {
+            var cur = s.EntitiesById[entityId].Pos;
+            var to = Next(cur, d);
+
+            // If next tile stops tumble and player is NOT side-attached, fail
+            if ((TraitsUtil.ResolveEffectiveMask(s, to) & Traits.StopsTumble) != 0 && s.EntryDir == null)
+            {
+                outRes.Add(new Blocked(Actor.Entity, Verb.Tumble, d, to, BlockReason.StopsTumble));
+                Anim.Bump(outRes, to);
+                return false;
+            }
+            // If current tile is Slippery => defer to PushChain
+            if ((TraitsUtil.ResolveEffectiveMask(s, cur) & Traits.SlipperyForEntity) != 0)
+                return PushChain(s, entityId, d, outRes);
+
+            // If next tile stops entity => fail
+            if ((TraitsUtil.ResolveEffectiveMask(s, to) & Traits.StopsEntity) != 0)
+            {
+                outRes.Add(new Blocked(Actor.Entity, Verb.Tumble, d, to, BlockReason.TileStopsEntity));
+                Anim.Bump(outRes, to);
+                return false;
+            }
+            // If next tile stops tumble => push chain instead
+            if ((TraitsUtil.ResolveEffectiveMask(s, to) & Traits.StopsTumble) != 0)
+                return PushChain(s, entityId, d, outRes);
+
+            // If next is Slippery => tumble once, then push chain forward
+            if ((TraitsUtil.ResolveEffectiveMask(s, to) & Traits.SlipperyForEntity) != 0)
+            {
+                DoTumble(s, entityId, d, outRes);
+                return PushChain(s, entityId, d, outRes);
+            }
+
+            DoTumble(s, entityId, d, outRes);
+            return true;
+        }
+
+        // -------------------- FLY (tile-first; Stop BEFORE; entity decides) ----------
+        public static bool Fly(GameState s, Dir d, StepResult outRes)
+        {
+            var from = s.PlayerPos;
+            var next = CheckFly(s, d);
+            if (next.Equals(from)) return false;
+
+            // Authoritative motion event for presenter
+            Anim.PlayerMove(outRes, from, next, d, "fly");
+
+            // Mutate logic state
+            s.PlayerPos = next;
+            s.AttachedEntityId = null;
+            s.EntryDir = null;
+            Anim.SetAttachment(outRes, null, null);
+
+            // Break breakables passed over — gather first, then remove
+            var toBreak = new List<int>();
+            foreach (var kv in s.EntitiesById)
+            {
+                var eid = kv.Key; var e = kv.Value; var pos = e.Pos;
+                if ((TraitsUtil.ResolveEffectiveMask(s, pos) & Traits.Breakable) == 0) continue;
+                if (pos.Equals(from)) continue;
+                bool crossed = false;
+                if (d == Dir.E || d == Dir.W)
+                {
+                    if (pos.y == from.y)
+                    {
+                        int a = from.x, b = next.x; if (a > b) { var t = a; a = b; b = t; }
+                        if (pos.x > a && pos.x < b) crossed = true;
+                    }
+                }
+                else
+                {
+                    if (pos.x == from.x)
+                    {
+                        int a = from.y, b = next.y; if (a > b) { var t = a; a = b; b = t; }
+                        if (pos.y > a && pos.y < b) crossed = true;
+                    }
+                }
+                if (crossed) toBreak.Add(eid);
+            }
+            // Deterministic removal order: sort by row-major position, then id
+            toBreak.Sort((a, b) =>
+            {
+                var pa = s.EntitiesById[a].Pos; var pb = s.EntitiesById[b].Pos;
+                int cy = pa.y.CompareTo(pb.y); if (cy != 0) return cy;
+                int cx = pa.x.CompareTo(pb.x); if (cx != 0) return cx;
+                return a.CompareTo(b);
+            });
+            foreach (var eid in toBreak)
+            {
+                var pos = s.EntitiesById[eid].Pos;
+                s.EntityAt.Remove(pos);
+                s.EntitiesById.Remove(eid);
+                outRes.Add(new DestroyEntity(eid, pos, "break"));
+                Anim.BreakImpact(outRes, pos);
+            }
+            return true;
+        }
+
+        // -------------------- HELPERS --------------------
+
+        private static void EntityMovement(GameState s, V2 from, V2 to, StepResult outRes, int entityId, string kind)
+        {
+            s.EntityAt.Remove(from);
+            s.EntityAt[to] = entityId;
+            s.EntitiesById[entityId].Pos = to;
+            FixPlayerPos(s);
+            Anim.EntityMove(outRes, entityId, from, to, kind);
+        }
+
+        private static bool DoTumble(GameState s, int entityId, Dir d, StepResult outRes)
+        {
+            if (!CheckEntityMovement(s, entityId, d, outRes)) return false;
+
+            var cur = s.EntitiesById[entityId].Pos;
+            var to = Next(cur, d);
+
+            EntityMovement(s, cur, to, outRes, entityId, "tumble");
+
+            if (s.EntryDir is Dir ed)
+            {
+                if (d == ed || d == ed.Opposite()) s.EntryDir = null;
+            }
+            else
+            {
+                // Was on-top: end side-attached in tumble direction
+                s.EntryDir = d;
+            }
+            return true;
+        }
+
+        private static bool DoEntityPushStep(GameState s, int entityId, Dir d, StepResult outRes)
+        {
+            if (!CheckEntityMovement(s, entityId, d, outRes)) return false;
+
+            var cur = s.EntitiesById[entityId].Pos;
+            var to = Next(cur, d);
+
+            EntityMovement(s, cur, to, outRes, entityId, "push");
+            return true;
+        }
+
+        private static bool CheckEntityMovement(GameState s, int entityId, Dir d, StepResult outRes)
+        {
+            var cur = s.EntitiesById[entityId].Pos;
+            var to = cur + d.Vec();
+            if (TraitsUtil.TileStopsEntity(s, to) || s.TryGetEntityAt(to) is not null) return false;
+            return true;
+        }
+
+        private static bool DoPlayerStep(GameState s, Dir d, StepResult outRes)
+        {
+            if (!CheckPlayerMovement(s, d, outRes)) return false;
+
+            var from = s.PlayerPos;
+            var to = from + d.Vec();
+
+            s.PlayerPos = to;
+            Anim.PlayerMove(outRes, from, to, d, "step");
+            return true;
+        }
+
+        private static bool CheckPlayerMovement(GameState s, Dir d, StepResult outRes)
+        {
+            var to = s.PlayerPos + d.Vec();
+            if (TraitsUtil.TileStopsPlayer(s, to) || s.AttachedEntityId is not null) return false;
+            return true;
+        }
+
+        // Keep as thin shims (backwards-compat)
+        private static bool DoSlideEntity(GameState s, int entityId, Dir d, StepResult outRes) => SlideEntity(s, entityId, d, outRes);
+
+        private static bool DoSlidePlayer(GameState s, V2 cur, Dir d, StepResult outRes) => Slide(s, d, outRes);
+
+        private static V2 CheckSlideEntity(GameState s, int entityId, Dir d) => CanSlideEntity(s, entityId, d) ? TraceSlideEntity(s, entityId, d) : s.EntitiesById[entityId].Pos;
+
+        private static V2 CheckSlidePlayer(GameState s, V2 pos, Dir d) => CanSlidePlayer(s, d) ? TraceSlidePlayer(s, pos, d) : pos;
+
+        private static void FixPlayerPos(GameState s)
+        {
+            if (s.AttachedEntityId == null) return;
+            s.PlayerPos = s.EntitiesById[(int)s.AttachedEntityId].Pos;
+        }
+
+        private static V2 CheckFly(GameState s, Dir d)
+        {
+            var cur = s.PlayerPos;
+            while (true)
+            {
+                var next = cur + d.Vec();
+                if (TraitsUtil.TileStopsFlight(s, next)) return cur;
+                if (TraitsUtil.TileSticksFlight(s, next)) return next;
+                cur = next;
+            }
+        }
+    }
+}

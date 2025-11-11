@@ -645,6 +645,37 @@ public partial class Exports
         try
         {
             var settings = Newtonsoft.Json.JsonConvert.DeserializeObject<SlimeGrid.Tools.ALD.ContextSettings>(settingsJson) ?? new SlimeGrid.Tools.ALD.ContextSettings();
+            // Debug: log parsed bucket heuristic parameters once read
+            try
+            {
+                var list = new System.Text.StringBuilder();
+                list.Append("[ALD] Buckets parsed: ");
+                if (settings.buckets != null)
+                {
+                    list.Append(settings.buckets.Count).Append('\n');
+                    foreach (var b in settings.buckets)
+                    {
+                        list.Append("  - ").Append(b?.name).Append(" maxLevels=").Append(b?.maxLevels).Append(" selectWeight=").Append(b?.selectWeight).Append('\n');
+                        if (b?.features != null)
+                        {
+                            foreach (var f in b.features)
+                            {
+                                list.Append("      ")
+                                    .Append(f?.id).Append(" mode=").Append(f?.mode)
+                                    .Append(" min=").Append(f?.bandMin).Append(" max=").Append(f?.bandMax)
+                                    .Append(" w=").Append(f?.weight).Append(" hard=").Append(f?.hard)
+                                    .Append('\n');
+                            }
+                        }
+                        list.Append("      T_sol=").Append(b?.T_sol).Append(" T_layout=").Append(b?.T_layout)
+                            .Append(" w_tiles=").Append(b?.w_tiles).Append(" w_entities=").Append(b?.w_entities)
+                            .Append(" w_spatial=").Append(b?.w_spatial).Append('\n');
+                    }
+                }
+                else list.Append("(null)\n");
+                try { Console.WriteLine(list.ToString()); } catch { }
+            }
+            catch { }
             var ctx = new SlimeGrid.Tools.ALD.AldContext(settings);
             var id = Guid.NewGuid().ToString("N");
             _aldCtx[id] = ctx;

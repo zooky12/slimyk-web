@@ -213,6 +213,23 @@ export function draw(dto) {
     }
   } catch (_) {}
 }
+// Render to a specific canvas element without disturbing the main game canvas.
+// Saves/restores internal module state so it is safe to call from other UIs.
+export function drawToCanvas(targetCanvas, dto) {
+  if (!targetCanvas || !dto) return;
+  const prevCanvas = canvas;
+  const prevCtx = ctx;
+  const prevTile = tileSize;
+  try {
+    canvas = targetCanvas;
+    ctx = canvas.getContext('2d');
+    draw(dto);
+  } finally {
+    canvas = prevCanvas;
+    ctx = prevCtx;
+    tileSize = prevTile;
+  }
+}
 // No-op animate so existing imports work (we’re not animating WASM effects here)
 export function animate(_effects) {
   /* intentionally empty; all motion comes from engine steps */

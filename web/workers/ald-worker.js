@@ -27,6 +27,8 @@ self.onmessage = async (ev) => {
       case 'aldGetBucketsSummary': res = await api.aldGetBucketsSummary(args[0]); break;
       case 'aldSelectBaseCtx': res = await api.aldSelectBaseCtx(args[0], args[1], args[2]); break;
       case 'aldMutate': res = await api.aldMutate(args[0], args[1], args[2]); break;
+      case 'aldPlaceOne': res = await api.aldPlaceOne(args[0], args[1]); break;
+      case 'aldRemoveOne': res = await api.aldRemoveOne(args[0], args[1]); break;
       case 'solverAnalyze': res = await api.solverAnalyze(args[0], args[1]); break;
       default: throw new Error('unknown_cmd:'+cmd);
     }

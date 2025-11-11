@@ -16,7 +16,7 @@ namespace SlimeGrid.Tools.ALD
             gs.buckets.Add(new BucketConfig
             {
                 name = "TrapRich_MidLength",
-                topK = 20,
+                maxLevels = 20,
                 features = new List<FeatureConfig>
                 {
                     new FeatureConfig{ id = "solutionLength", mode=FeatureMode.Band, bandMin=12, bandMax=20, weight=1.0f },
@@ -47,7 +47,9 @@ namespace SlimeGrid.Tools.ALD
             {
                 var (raw, reject) = Heuristics.Score(b.Config, seedCand.features, settings.accept_capped_weight);
                 seedCand.rawScore = raw; seedCand.normalizedScore = raw; // first insert; min/max not tracked yet
-                if (!reject && b.PassSimilarity(seedCand, new DedupeSettings())) b.TryInsert(seedCand);
+                if (reject) continue;
+                if (raw < 0.01f) continue; // safeguard threshold
+                if (b.PassSimilarity(seedCand, new DedupeSettings())) b.TryInsert(seedCand);
             }
 
             var cfg = new SolverConfig();
@@ -78,6 +80,7 @@ namespace SlimeGrid.Tools.ALD
                 {
                     var (raw, reject) = Heuristics.Score(b.Config, cand.features, settings.accept_capped_weight);
                     if (reject) continue;
+                    if (raw < 0.01f) continue; // safeguard threshold
                     cand.rawScore = raw;
                     scored.Add(cand);
                 }

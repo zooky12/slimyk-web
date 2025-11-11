@@ -23,7 +23,10 @@ namespace SlimeGrid.Tools.ALD
     public sealed class BucketConfig
     {
         public string name = "Default";
-        public int topK = 20;
+        // Per-bucket capacity (max number of levels to keep). If 0 or less, treated as unlimited.
+        public int maxLevels = 20;
+        // Selection bias for base picking (relative weight). Defaults to 1.0.
+        public double selectWeight = 1.0;
         public List<FeatureConfig> features = new();
         public float T_sol = 0.12f;     // solution similarity gate
         public float T_layout = 0.25f;  // layout similarity gate

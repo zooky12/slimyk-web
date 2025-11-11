@@ -827,6 +827,20 @@
                                         </div>
                                     </div>
                                 </div>
+                                <div class="build-section"> <button type="button" class="tile-toggle"
+                                        data-target="autoPreview" aria-expanded="false">Candidate Preview</button>
+                                    <div class="tile-filter-panel hidden" id="autoPreview" aria-hidden="true"
+                                        style="padding:8px 10px;">
+                                        <div class="levels-row" style="gap:8px; align-items:center;">
+                                            <canvas id="autoPreviewCanvas"
+                                                style="width:100%; max-width:480px; border:1px solid rgba(255,255,255,.12); border-radius:6px; display:block;"></canvas>
+                                            <div>
+                                                <div class="hint">Shows best candidate (by longest shortest solution) every 10 attempts.</div>
+                                                <div id="autoPreviewInfo" class="hint">Best shortest steps: -</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                                 <div class="levels-row"> <button id="runAuto">Run Auto</button> <button id="keepRunning"
                                         title="Reuse current buckets and continue generating">Keep Running</button>
                                     <button id="stopAuto" disabled>Stop</button> <button id="autoRestore">Restore
@@ -856,6 +870,12 @@
                                                 title="Probability to use the original snapshot as base (0..1). Otherwise pick from buckets.">
                                                 Use base chance <input id="autoBaseUseRatio" type="number" step="0.05"
                                                     value="1" min="0" max="1" style="width:72px" /> </label> <label
+                                                title="If a solution shorter than this is found, stop early and discard the candidate">
+                                                Min steps <input id="autoMinSteps" type="number" value="0" min="0" style="width:72px" />
+                                            </label> <label
+                                                title="Require candidates to be harder (longer shortest solution) than their base">
+                                                Harder than base <input id="autoRequireHarder" type="checkbox" checked />
+                                            </label> <label
                                                 title="Fraction of mutations that enable greedy single-edits (0..1)">
                                                 Greedy ratio <input id="autoGreedyRatio" type="number" step="0.05"
                                                     value="0" min="0" max="1" style="width:72px" /> </label> <label

@@ -40,6 +40,10 @@ namespace SlimeGrid.Tools.ALD
         {
             { "PlayerSpawn", new MinMax{ min = 1, max = null } }
         };
+        // Optional per-cell allow mask (rows of columns). When provided, edits are only allowed where mask[y][x] == true.
+        // Null or out-of-range indexes default to allowed.
+        public bool[][] editAllowMask { get; set; } = null;
+        public bool[][] editAllowEntitiesMask { get; set; } = null;
     }
 
     public sealed class OperatorWeights
@@ -151,6 +155,8 @@ namespace SlimeGrid.Tools.ALD
             {
                 var (raw, reject) = Heuristics.Score(b.Config, features, Settings.generator?.accept_capped_weight ?? 1.0f);
                 if (reject) continue;
+                // Safeguard: skip adding to this bucket if its heuristic value is too low
+                if (raw < 0.01f) continue;
                 var cand = new LevelCandidate { dto = dto, reachableHash = sig, report = report, features = features, rawScore = raw, normalizedScore = raw };
                 if (b.PassSimilarity(cand, Settings.dedupe))
                 {
@@ -250,7 +256,7 @@ namespace SlimeGrid.Tools.ALD
         public LevelDTO SelectBase()
         {
             // Pool topK entries per bucket
-            var pool = new List<(float score, LevelDTO level)>();
+            var pool = new List<(float score, LevelDTO level, double bias)>();
             int topK = Math.Max(1, Settings.selection?.topK ?? 5);
             double skew = Settings.selection?.skew ?? 1.0;
             foreach (var b in Buckets)
@@ -258,8 +264,10 @@ namespace SlimeGrid.Tools.ALD
                 // Sort bucket items by normalizedScore descending and take topK
                 var items = new List<LevelCandidate>(b.Items);
                 items.Sort((a, c) => c.normalizedScore.CompareTo(a.normalizedScore));
+                double bias = 1.0;
+                try { bias = (b.Config != null && b.Config.selectWeight > 0) ? b.Config.selectWeight : 1.0; } catch { bias = 1.0; }
                 for (int i = 0; i < items.Count && i < topK; i++)
-                    pool.Add((items[i].normalizedScore, items[i].dto));
+                    pool.Add((items[i].normalizedScore, items[i].dto, bias));
             }
             if (pool.Count == 0) return null;
             double min = double.PositiveInfinity; foreach (var e in pool) if (e.score < min) min = e.score;
@@ -269,6 +277,7 @@ namespace SlimeGrid.Tools.ALD
             {
                 double basew = (pool[i].score - min) + eps; if (basew < eps) basew = eps;
                 double w = skew <= 0 ? 1.0 : Math.Pow(basew, skew);
+                w *= pool[i].bias <= 0 ? 1.0 : pool[i].bias;
                 weights[i] = w; sum += w;
             }
             double r = Rng.NextDouble() * (sum > 0 ? sum : 1.0);
@@ -291,7 +300,28 @@ namespace SlimeGrid.Tools.ALD
             return cur;
         }
 
-        private LevelDTO MutateOnce(LevelDTO dto, MutationSettings m, bool useGreedy)
+        private bool MaskAllowsTile(MutationSettings m, int x, int y)
+        {
+            var M = m?.editAllowMask;
+            if (M == null || M.Length == 0) return true;
+            if (y < 0 || y >= M.Length) return true;
+            var row = M[y];
+            if (row == null || row.Length == 0) return true;
+            if (x < 0 || x >= row.Length) return true;
+            return row[x];
+        }
+
+                private bool MaskAllowsEntity(MutationSettings m, int x, int y)
+        {
+            var M = m?.editAllowEntitiesMask;
+            if (M == null || M.Length == 0) return true;
+            if (y < 0 || y >= M.Length) return true;
+            var row = M[y];
+            if (row == null || row.Length == 0) return true;
+            if (x < 0 || x >= row.Length) return true;
+            return row[x];
+        }
+private LevelDTO MutateOnce(LevelDTO dto, MutationSettings m, bool useGreedy)
         {
             // Choose operator by weights
             double greedyW = useGreedy ? (m.operatorWeights.greedyPlaceOne + m.operatorWeights.greedyRemoveOne) : 0.0;
@@ -316,13 +346,7 @@ namespace SlimeGrid.Tools.ALD
                 var nodesScale = 1.0 - 0.85 * ratio; // more aggressive node scaling
                 int effDepth = Math.Max(12, (int)Math.Round(baseDepth * depthScale));
                 int effNodes = Math.Max(2000, (int)Math.Round(baseNodes * nodesScale));
-                var opts = new GreedyOps.PlaceOneOptions {
-                    tilesPlace = m.tilesPlace,
-                    entitiesPlace = m.entitiesPlace,
-                    movePlayer = m.movePlayer,
-                    maxDepth = effDepth,
-                    maxNodes = effNodes
-                };
+                var opts = new GreedyOps.PlaceOneOptions { tilesPlace = m.tilesPlace, entitiesPlace = m.entitiesPlace, movePlayer = m.movePlayer, maxDepth = effDepth, maxNodes = effNodes, editAllowMask = m.editAllowMask, editAllowEntitiesMask = m.editAllowEntitiesMask };
                 var res = GreedyOps.PlaceOne(dto, opts);
                 return res.ok && res.level != null ? res.level : dto;
             }
@@ -335,7 +359,7 @@ namespace SlimeGrid.Tools.ALD
                 var nodesScale = 1.0 - 0.85 * ratio;
                 int effDepth = Math.Max(12, (int)Math.Round(baseDepth * depthScale));
                 int effNodes = Math.Max(2000, (int)Math.Round(baseNodes * nodesScale));
-                var opts = new GreedyOps.RemoveOneOptions { entitiesRemove = m.entitiesRemove, maxDepth = effDepth, maxNodes = effNodes };
+                var opts = new GreedyOps.RemoveOneOptions { entitiesRemove = m.entitiesRemove, maxDepth = effDepth, maxNodes = effNodes, editAllowMask = m.editAllowMask, editAllowEntitiesMask = m.editAllowEntitiesMask };
                 var res = GreedyOps.RemoveOne(dto, opts);
                 return res.ok && res.level != null ? res.level : dto;
             }
@@ -343,14 +367,14 @@ namespace SlimeGrid.Tools.ALD
             if (op == "replaceTile")
             {
                 var state = Loader.FromDTO(dto);
-                int W = state.Grid.W, H = state.Grid.H;
-                bool hadAllowList = (m.tilesPlace != null && m.tilesPlace.Count > 0);
+                int gW = state.Grid.W, gH = state.Grid.H;
+                bool allowProvided = (m.tilesPlace != null);
 
                 // Compute reachable area from player using simple tile passability (non-StopsPlayer)
-                var reachable = new bool[W, H];
+                var reachable = new bool[gW, gH];
                 var q = new Queue<V2>();
                 var p0 = state.PlayerPos;
-                bool InB(V2 p) => p.x >= 0 && p.y >= 0 && p.x < W && p.y < H;
+                bool InB(V2 p) => p.x >= 0 && p.y >= 0 && p.x < gW && p.y < gH;
                 bool Pass(V2 p)
                 {
                     var mask = TraitsUtil.ResolveTileMask(state, p);
@@ -372,42 +396,63 @@ namespace SlimeGrid.Tools.ALD
                 {
                     foreach (var (dx,dy) in dirs)
                     {
-                        int nx=x+dx, ny=y+dy; if (nx<0||ny<0||nx>=W||ny>=H) continue; if (reachable[nx,ny]) return true;
+                        int nx=x+dx, ny=y+dy; if (nx<0||ny<0||nx>=gW||ny>=gH) continue; if (reachable[nx,ny]) return true;
                     }
                     return false;
                 }
 
                 // Build candidate positions: inside reachable OR immediate wall adjacent to reachable
                 var candPos = new List<(int x,int y)>();
-                for (int y = 0; y < H; y++)
-                    for (int x = 0; x < W; x++)
+                for (int y = 0; y < gH; y++)
+                    for (int x = 0; x < gW; x++)
                     {
                         var t = state.Grid.CellRef(new V2(x,y)).Type;
-                        bool okPos = reachable[x,y] || (t == TileType.Wall && IsAdjacentToReach(x,y));
+                        bool okPos = (reachable[x,y] || (t == TileType.Wall && IsAdjacentToReach(x,y))) && MaskAllowsTile(m, x, y);
                         if (okPos) candPos.Add((x,y));
                     }
 
-                if (hadAllowList)
+                if (allowProvided)
                 {
-                    // Try limited attempts within candidate positions
-                    for (int tries = 0; tries < 24 && candPos.Count > 0; tries++)
+                    if (m.tilesPlace.Count > 0)
                     {
-                        var (x,y) = candPos[Rng.Next(candPos.Count)];
-                        var name = m.tilesPlace[Rng.Next(m.tilesPlace.Count)];
-                        if (!Enum.TryParse<TileType>(name, true, out var tt)) continue;
-                        var cur = state.Grid.CellRef(new V2(x, y)).Type;
-                        if (cur == tt) continue;
-                        var next = JsonConvert.DeserializeObject<LevelDTO>(JsonConvert.SerializeObject(dto));
-                        EnsureGridInitialized(next);
-                        next.tileGrid[y][x] = tt.ToString();
-                        if (RespectsCounts(next, m)) return next;
+                        // Try limited attempts within candidate positions
+                        for (int tries = 0; tries < 24 && candPos.Count > 0; tries++)
+                        {
+                            var (x,y) = candPos[Rng.Next(candPos.Count)];
+                            var name = m.tilesPlace[Rng.Next(m.tilesPlace.Count)];
+                            if (!Enum.TryParse<TileType>(name, true, out var tt)) continue;
+                            var cur = state.Grid.CellRef(new V2(x, y)).Type;
+                            if (cur == tt) continue;
+                            var next = JsonConvert.DeserializeObject<LevelDTO>(JsonConvert.SerializeObject(dto));
+                            EnsureGridInitialized(next);
+                            next.tileGrid[y][x] = tt.ToString();
+                            if (RespectsCounts(next, m)) return next;
+                        }
                     }
-                    // We had an allowed list and couldn't place a valid change: do NOT fallback to unrestricted operator
+                    // An allow-list was provided (even if empty): do NOT fallback to unrestricted operator
                     return dto;
                 }
-                // No allow-list provided: fallback to ReplaceOperator palette
-                var mask = InfluenceMask.Compute(state);
-                var ok = ReplaceOperator.TryApply(new Random(Rng.Next()), Settings.generator ?? new GeneratorSettings(), state, dto, mask, out var dtoOut);
+                // No allow-list provided: fallback to ReplaceOperator palette; respect edit allow mask if provided
+                var infMask = InfluenceMask.Compute(state);
+                bool[,] useMask;
+                if (m.editAllowMask != null)
+                {
+                    int w2 = state.Grid.W, h2 = state.Grid.H;
+                    useMask = new bool[w2, h2];
+                    for (int y = 0; y < h2; y++)
+                        for (int x = 0; x < w2; x++)
+                        {
+                            bool allow = true;
+                            if (y >= 0 && y < m.editAllowMask.Length)
+                            {
+                                var row = m.editAllowMask[y];
+                                if (row != null && x >= 0 && x < row.Length) allow = row[x];
+                            }
+                            useMask[x, y] = infMask[x, y] && allow;
+                        }
+                }
+                else useMask = infMask;
+                var ok = ReplaceOperator.TryApply(new Random(Rng.Next()), Settings.generator ?? new GeneratorSettings(), state, dto, useMask, out var dtoOut);
                 return ok && dtoOut != null ? dtoOut : dto;
             }
             if (op == "placeEntity")
@@ -419,6 +464,7 @@ namespace SlimeGrid.Tools.ALD
                     for (int tries = 0; tries < 16; tries++)
                     {
                         int x = Rng.Next(W), y = Rng.Next(H);
+                        if (!MaskAllowsEntity(m, x, y)) continue;
                         var name = m.entitiesPlace[Rng.Next(m.entitiesPlace.Count)];
                         if (!Enum.TryParse<EntityType>(name, true, out var et)) continue;
                         // Player spawn: ensure tile supports player (not StopsPlayer)
@@ -453,6 +499,8 @@ namespace SlimeGrid.Tools.ALD
                                     int idx = next.entities.FindIndex(e => e != null && e.type == et);
                                     if (idx >= 0)
                                     {
+                                        // Do not relocate if the destination is masked off
+                                        if (!MaskAllowsEntity(m, x, y)) return dto;
                                         var ee = next.entities[idx]; ee.x = x; ee.y = y; next.entities[idx] = ee;
                                         if (RespectsCounts(next, m)) return next;
                                         relocated = true;
@@ -474,7 +522,7 @@ namespace SlimeGrid.Tools.ALD
             if (op == "removeEntity")
             {
                 var list = dto.entities ?? new List<EntityDTO>();
-                var candidates = list.Where(e => e != null && m.entitiesRemove.Contains(e.type.ToString())).ToList();
+                var candidates = list.Where(e => e != null && m.entitiesRemove.Contains(e.type.ToString()) && MaskAllowsEntity(m, e.x, e.y)).ToList();
                 if (candidates.Count > 0)
                 {
                     var e = candidates[Rng.Next(candidates.Count)];
@@ -487,11 +535,29 @@ namespace SlimeGrid.Tools.ALD
                 return dto;
             }
 
-            // default fallback to ReplaceOperator if unknown
+            // default fallback to ReplaceOperator if unknown (respect edit mask)
             {
                 var state = Loader.FromDTO(dto);
-                var mask = InfluenceMask.Compute(state);
-                var ok = ReplaceOperator.TryApply(new Random(Rng.Next()), Settings.generator ?? new GeneratorSettings(), state, dto, mask, out var dtoOut);
+                var infMask = InfluenceMask.Compute(state);
+                bool[,] useMask;
+                if (m.editAllowMask != null)
+                {
+                    int w3 = state.Grid.W, h3 = state.Grid.H;
+                    useMask = new bool[w3, h3];
+                    for (int y = 0; y < h3; y++)
+                        for (int x = 0; x < w3; x++)
+                        {
+                            bool allow = true;
+                            if (y >= 0 && y < m.editAllowMask.Length)
+                            {
+                                var row = m.editAllowMask[y];
+                                if (row != null && x >= 0 && x < row.Length) allow = row[x];
+                            }
+                            useMask[x, y] = infMask[x, y] && allow;
+                        }
+                }
+                else useMask = infMask;
+                var ok = ReplaceOperator.TryApply(new Random(Rng.Next()), Settings.generator ?? new GeneratorSettings(), state, dto, useMask, out var dtoOut);
                 return ok && dtoOut != null ? dtoOut : dto;
             }
         }

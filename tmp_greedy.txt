@@ -9,9 +9,7 @@ namespace SlimeGrid.Tools.ALD
     // Greedy single-edit operators inspired by the old prototype (Place 1 / Remove 1)
     public static class GreedyOps
     {
-        public sealed class PlaceOneOptions
-        {
-            public List<string> tilesPlace { get; set; } = new();
+         = new();
             public List<string> entitiesPlace { get; set; } = new();
             public bool movePlayer { get; set; } = false; // allow relocating PlayerSpawn
             public int maxDepth { get; set; } = 100;
@@ -19,10 +17,9 @@ namespace SlimeGrid.Tools.ALD
             // Optional per-cell allow mask (rows of columns). When provided, edits are only allowed where mask[y][x] == true.
             public bool[][] editAllowMask { get; set; } = null;
             public bool[][] editAllowEntitiesMask { get; set; } = null;
-            // Optional starting min-steps threshold.
+            // Optional starting min-steps threshold. If the base has a solution, the threshold will be raised
+            // to the base fastest solution length.
             public int minSteps { get; set; } = 0;
-            // If true, raise minSteps to base fastest solution length.
-            public bool requireHarderThanBase { get; set; } = false;
         }
 
         public sealed class RemoveOneOptions
@@ -89,8 +86,7 @@ namespace SlimeGrid.Tools.ALD
                 var baseRep = BruteForceSolver.AnalyzeBfs(seed, new SolverConfig { DepthCap = opts.maxDepth, NodesCap = opts.maxNodes, MinSteps = 0 });
                 if (baseRep.topSolutions != null && baseRep.topSolutions.Count > 0)
                 {
-                    if (opts.requireHarderThanBase)
-                        currentMinSteps = Math.Max(currentMinSteps, baseRep.topSolutions[0].length);
+                    currentMinSteps = Math.Max(currentMinSteps, baseRep.topSolutions[0].length);
                     baseMoves = new SlimeGrid.Tools.Solver.PackedMoves { Buffer = baseRep.topSolutions[0].movesPacked, Length = baseRep.topSolutions[0].length };
                 }
             } catch { }
@@ -137,7 +133,7 @@ namespace SlimeGrid.Tools.ALD
                         // If base path still solves, discard early
                         if (baseMoves.Length > 0 && BasePathStillSolves(testDto, baseMoves)) continue;
                         // Configure dynamic min-steps and stop-on-improvement
-                        var cfgLocal = new SolverConfig { DepthCap = opts.maxDepth, NodesCap = opts.maxNodes, MinSteps = currentMinSteps, StopOnFirstLongerThanMin = (opts.requireHarderThanBase && currentMinSteps > 0) };
+                        var cfgLocal = new SolverConfig { DepthCap = opts.maxDepth, NodesCap = opts.maxNodes, MinSteps = currentMinSteps, StopOnFirstLongerThanMin = (currentMinSteps > 0) };
                         var report = BruteForceSolver.AnalyzeBfs(Loader.FromDTO(testDto), cfgLocal);
                         if (report.solvedTag == "too_short" || report.topSolutions == null || report.topSolutions.Count == 0) continue;
                         int fastest = report.topSolutions[0].length;
@@ -147,7 +143,7 @@ namespace SlimeGrid.Tools.ALD
                         {
                             bestX = x; bestY = y; bestTile = tt.ToString(); bestEntity = null; bestOrient = null;
                             bestFast = fastest; bestDead = deads; bestSols = sols;
-                            if (opts.requireHarderThanBase && fastest > currentMinSteps) currentMinSteps = fastest;
+                            if (fastest > currentMinSteps) currentMinSteps = fastest;
                         }
                     }
                 }
@@ -204,7 +200,7 @@ namespace SlimeGrid.Tools.ALD
                         testDto2.entities = list2;
                         // If base path still solves, discard early
                         if (baseMoves.Length > 0 && BasePathStillSolves(testDto2, baseMoves)) continue;
-                        var cfgLocal2 = new SolverConfig { DepthCap = opts.maxDepth, NodesCap = opts.maxNodes, MinSteps = currentMinSteps, StopOnFirstLongerThanMin = (opts.requireHarderThanBase && currentMinSteps > 0) };
+                        var cfgLocal2 = new SolverConfig { DepthCap = opts.maxDepth, NodesCap = opts.maxNodes, MinSteps = currentMinSteps, StopOnFirstLongerThanMin = (currentMinSteps > 0) };
                         var report2 = BruteForceSolver.AnalyzeBfs(Loader.FromDTO(testDto2), cfgLocal2);
                         if (report2.solvedTag == "too_short" || report2.topSolutions == null || report2.topSolutions.Count == 0) continue;
                         int fastest2 = report2.topSolutions[0].length;
@@ -214,7 +210,7 @@ namespace SlimeGrid.Tools.ALD
                         {
                             bestX = x; bestY = y; bestTile = null; bestEntity = et.ToString(); bestOrient = null;
                             bestFast = fastest2; bestDead = deads2; bestSols = sols2;
-                            if (opts.requireHarderThanBase && fastest2 > currentMinSteps) currentMinSteps = fastest2;
+                            if (fastest2 > currentMinSteps) currentMinSteps = fastest2;
                         }
                     }
                 }
@@ -340,4 +336,5 @@ namespace SlimeGrid.Tools.ALD
         }
     }
 }
+
 

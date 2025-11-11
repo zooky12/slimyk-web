@@ -24,6 +24,11 @@ namespace SlimeGrid.Tools.Solver
         public int RelaxVisitedFromDepth = 60;
         // NEW: emit traces for top K solutions (1 or 3; 0 disables)
         public int EmitTraceTopK = 3;
+        // NEW: minimum acceptable steps. If a solution with length <= MinSteps is found in BFS, stop early and discard.
+        public int MinSteps = 0;
+        // When true and MinSteps > 0: if a solution longer than MinSteps is found, stop search early and return that
+        // solution (used by greedy single-edit search to adopt first improvement).
+        public bool StopOnFirstLongerThanMin = false;
     }
 
     public static class BruteForceSolver
@@ -441,6 +446,28 @@ namespace SlimeGrid.Tools.Solver
                     if (child.GameOver) continue;
                     if (child.Win)
                     {
+                        // Early-out: if found a too-short (or equal) solution, stop and return empty solutions (discard).
+                        if (cfg.MinSteps > 0 && next.Length <= cfg.MinSteps)
+                        {
+                            sw.Stop();
+                            report.solutionsTotalCount = 0;
+                            report.solutionsFilteredCount = 0;
+                            report.topSolutions.Clear();
+                            report.solvedTag = "too_short";
+                            return report;
+                        }
+                        // Early-accept: if configured and first solution is strictly longer than MinSteps, accept immediately
+                        if (cfg.MinSteps > 0 && cfg.StopOnFirstLongerThanMin && next.Length > cfg.MinSteps)
+                        {
+                            sw.Stop();
+                            report.topSolutions.Clear();
+                            report.topSolutions.Add(new SolutionEntry { length = next.Length, movesPacked = next.Snapshot().Buffer, movesNESW = next.ToNESWString(next.Length) });
+                            report.solutionsTotalCount = 1;
+                            report.solutionsFilteredCount = 1;
+                            report.deadEndsCount = 0;
+                            report.solvedTag = "improved";
+                            return report;
+                        }
                         solutionsRaw.Add(next);
                         goals.Add(childKey);
                         continue;
